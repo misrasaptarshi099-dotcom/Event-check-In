@@ -1,41 +1,130 @@
-# Documentation
+# ──────────────────────────────────────────────
+# Documentation (untracked, lives locally only)
+# ──────────────────────────────────────────────
 docs/
 architecture.md
 backend_schema.md
 file_structure.md
 prd.md
 rules.md
+DESIGN.md
+DESIGN_SYSTEM.md
+CHANGELOG.md
 
-# Agent Skills & Tooling
+# ──────────────────────────────────────────────
+# Agent Skills & AI Tooling
+# ──────────────────────────────────────────────
 .agent/
 .agents/
 .claude/
 .codex/
 .cursor/
 .gemini/
+.copilot/
+.tabnine/
+.windsurf/
 skills/
 skills-lock.json
+AGENTS.md
+GEMINI.md
+CLAUDE.md
+CODEX.md
+CURSORRULES
 
-# Environment & Secrets
+# ──────────────────────────────────────────────
+# Environment & Secrets (ALL env files)
+# ──────────────────────────────────────────────
 .env
-.env*.local
+.env.*
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.example
+.env.sample
+.env.template
 *.pem
 *.key
 *.cert
+*.p12
+*.pfx
+*.jks
 service-account*.json
 firebase-adminsdk*.json
+*-credentials.json
+*-secret*.json
 
-# Dependencies & Build
+# ──────────────────────────────────────────────
+# Dependencies
+# ──────────────────────────────────────────────
 node_modules/
+.pnp
+.pnp.js
+.pnp.cjs
+.yarn/install-state.gz
+
+# ──────────────────────────────────────────────
+# Build & Output
+# ──────────────────────────────────────────────
 .next/
+out/
 dist/
 build/
 .vercel/
+.turbo/
+*.tsbuildinfo
 
+# ──────────────────────────────────────────────
+# Testing & Coverage
+# ──────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+
+# ──────────────────────────────────────────────
 # Logs & Diagnostics
+# ──────────────────────────────────────────────
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 .system_generated/
+
+# ──────────────────────────────────────────────
+# IDE & Editor
+# ──────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ──────────────────────────────────────────────
+# OS Junk
+# ──────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ──────────────────────────────────────────────
+# Misc
+# ──────────────────────────────────────────────
+*.tgz
+*.zip
+*.tar.gz
+.cache/
+.temp/
+.tmp/
