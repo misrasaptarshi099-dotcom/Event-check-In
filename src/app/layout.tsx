@@ -9,10 +9,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Buttermax OS — Event Check-In',
+  title: 'VOUCH — Real-Time Event Check-In',
   description:
-    'Real-time event check-in system with TOTP dynamic QR codes, offline scanning, and AI-powered insights.',
-  keywords: ['event', 'check-in', 'qr code', 'totp', 'real-time', 'dashboard'],
+    'VOUCH: Concurrency-safe event check-in system with TOTP dynamic rotating QR codes, offline scanning, and AI-powered insights.',
+  keywords: ['vouch', 'event', 'check-in', 'qr code', 'totp', 'real-time', 'dashboard'],
 };
 
 export default function RootLayout({

@@ -9,12 +9,12 @@ export default function HomePage() {
       {/* Header */}
       <header className="border-b border-border-rigid px-6 md:px-12 flex items-center justify-between h-16">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-text">
-            Buttermax OS
+          <span className="text-sm font-mono font-bold tracking-[0.25em] text-primary">
+            VOUCH
           </span>
           <span className="text-[10px] font-mono text-muted-text">/</span>
-          <span className="text-[10px] font-mono uppercase tracking-[0.15em]">
-            Event Check-In
+          <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-text">
+            Event Check-In OS
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -73,7 +73,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-border-rigid px-6 md:px-12 py-4 flex items-center justify-between">
         <span className="text-[10px] font-mono text-muted-text uppercase tracking-wider">
-          MIC Development · v1.0
+          VOUCH Infrastructure · v1.0
         </span>
         <span className="text-[10px] font-mono text-muted-text">
           {new Date().getFullYear()}
