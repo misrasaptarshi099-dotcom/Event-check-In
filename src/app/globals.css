@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'PP Editorial New';
+  src: url('https://db.onlinewebfonts.com/t/20e29b1e5a59334ccb33658db4edb549.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'PP Editorial New';
+  src: url('https://db.onlinewebfonts.com/t/7b8c2df6a02b1156e5223e7f457ff2aa.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  --surface: #FBF9F4;
+  --surface-dim: #DCDAD5;
+  --surface-low: #F6F3EE;
+  --surface-container: #F0EEE9;
+  --surface-high: #EAE8E3;
+  --surface-highest: #E4E2DD;
+  --primary: #0F0F0F;
+  --primary-container: #1C1B1B;
+  --accent: #D93614;
+  --accent-hover: #B32000;
+  --muted-text: #8C8A85;
+  --border-rigid: #0F0F0F;
+}
+
+/* Global Noise Texture */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.15;
+  mix-blend-mode: multiply;
+}
+
+/* Base Body Styles */
+body {
+  background-color: var(--surface);
+  color: var(--primary);
+  font-feature-settings: "tnum", "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 1px Rigid Grid Lines */
+.border-rigid {
+  border-color: var(--border-rigid);
+}
+
+.grid-ledger-row {
+  border-bottom: 1px solid var(--border-rigid);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.grid-ledger-row:hover {
+  background-color: var(--primary);
+  color: var(--surface-high);
+}
+
+.grid-ledger-row:hover .muted-label {
+  color: var(--surface-dim);
+}
+
+.grid-ledger-row:hover .chip-border {
+  border-color: var(--surface-dim);
+  color: var(--surface-high);
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-rigid);
+}
+
+.glass-dock {
+  background: rgba(251, 249, 244, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-rigid);
+}
+
+/* Custom Scrollbar for Ledger */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-high);
+  border-left: 1px solid var(--border-rigid);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Pulse animation for scanner */
+@keyframes scan-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
+}
+
+.animate-scan-pulse {
+  animation: scan-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
