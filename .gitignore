@@ -4,6 +4,17 @@ architecture.md
 backend_schema.md
 file_structure.md
 prd.md
+rules.md
+
+# Agent Skills & Tooling
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+skills/
+skills-lock.json
 
 # Environment & Secrets
 .env
