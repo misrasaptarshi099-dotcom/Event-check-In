@@ -1,0 +1,30 @@
+# Documentation
+docs/
+architecture.md
+backend_schema.md
+file_structure.md
+prd.md
+
+# Environment & Secrets
+.env
+.env*.local
+*.pem
+*.key
+*.cert
+service-account*.json
+firebase-adminsdk*.json
+
+# Dependencies & Build
+node_modules/
+.next/
+dist/
+build/
+.vercel/
+
+# Logs & Diagnostics
+*.log
+npm-debug.log*
+yarn-debug.log*
+.system_generated/
+.DS_Store
+Thumbs.db
