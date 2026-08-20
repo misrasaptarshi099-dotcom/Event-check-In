@@ -260,19 +260,35 @@ export default function HomePage() {
                     const eventTitle = reg.event?.name || 'Event Pass';
                     const eventDate = reg.event?.eventDate;
                     const eventVenue = reg.event?.venue;
+                    const isEventEnded = reg.event?.eventEndDate
+                      ? new Date(reg.event.eventEndDate).getTime() <= Date.now()
+                      : (reg.event?.eventDate ? new Date(reg.event.eventDate).getTime() <= Date.now() : false);
 
                     return (
                       <div
                         key={reg.id}
-                        className="border-2 border-border-rigid bg-surface p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group"
+                        className={`border-2 border-border-rigid p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${
+                          isEventEnded ? 'bg-surface-low opacity-85' : 'bg-surface'
+                        }`}
                       >
                         {/* Status bar */}
                         <div className="flex items-center justify-between border-b border-border-rigid pb-2.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-[#15803D] animate-ping" />
-                            <span className="text-[10px] uppercase font-bold text-primary tracking-widest">
-                              ACTIVE PASS
-                            </span>
+                            {isEventEnded ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-muted-text" />
+                                <span className="text-[10px] uppercase font-bold text-muted-text tracking-widest">
+                                  EXPIRED PASS
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-[#15803D] animate-ping" />
+                                <span className="text-[10px] uppercase font-bold text-primary tracking-widest">
+                                  ACTIVE PASS
+                                </span>
+                              </>
+                            )}
                           </div>
                           {(reg.guestCount ?? 1) > 1 ? (
                             <span className="text-[10px] bg-surface-high border border-border-rigid px-2 py-0.5 font-bold text-primary">
@@ -301,18 +317,24 @@ export default function HomePage() {
                           </p>
                         </div>
 
-                        {/* CTA button to open live pass & QR */}
+                        {/* CTA button or Static Expired State */}
                         <div className="pt-2 border-t border-border-rigid">
-                          <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
-                            <Button
-                              variant="accent"
-                              size="md"
-                              className="w-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2"
-                            >
-                              <span>🎟️ Open Dynamic QR Pass</span>
-                              <span>→</span>
-                            </Button>
-                          </Link>
+                          {isEventEnded ? (
+                            <div className="w-full py-2.5 px-3 bg-surface-container border border-border-rigid text-center text-xs font-bold uppercase tracking-wider text-muted-text flex items-center justify-center gap-2 select-none">
+                              <span>🔒 Event Concluded · Pass Expired</span>
+                            </div>
+                          ) : (
+                            <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
+                              <Button
+                                variant="accent"
+                                size="md"
+                                className="w-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2"
+                              >
+                                <span>🎟️ Open Dynamic QR Pass</span>
+                                <span>→</span>
+                              </Button>
+                            </Link>
+                          )}
                         </div>
                       </div>
                     );

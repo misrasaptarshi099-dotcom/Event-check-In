@@ -4,7 +4,7 @@ import { computeEventFinance } from './finance.service';
 import { formatCurrency } from '@/lib/utils/format';
 import type { StatsBundle, FinanceBundle } from '@/types';
 
-const GEMINI_TIMEOUT_MS = 8_000;
+const GEMINI_TIMEOUT_MS = 15_000;
 const MAX_OUTPUT_TOKENS = 500;
 
 export interface AiInsightResponse {
@@ -23,7 +23,7 @@ export interface AiInsightResponse {
  * Budget Guardrails:
  * - Uses cost-efficient gemini-3.5-flash-lite model
  * - Strict maxOutputTokens: 500
- * - 8-second hard timeout via SDK httpOptions
+ * - 15-second timeout via SDK httpOptions (satisfies >= 10s minimum deadline)
  * - Rate limited upstream in the API route handler
  * - Fallback to raw computed stats/finance on any failure
  */

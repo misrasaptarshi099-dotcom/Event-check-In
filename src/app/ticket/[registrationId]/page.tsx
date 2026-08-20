@@ -90,6 +90,10 @@ export default function TicketPage({ params }: PageParams) {
     createdAt: new Date().toISOString(),
   };
 
+  const isEventEnded = displayEvent.eventEndDate
+    ? new Date(displayEvent.eventEndDate).getTime() <= Date.now()
+    : (displayEvent.eventDate ? new Date(displayEvent.eventDate).getTime() <= Date.now() : false);
+
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface-low text-primary">
       {/* Top Header */}
@@ -103,7 +107,10 @@ export default function TicketPage({ params }: PageParams) {
             Digital Admission Pass
           </span>
         </Link>
-        <StatusChip status="VERIFIED ENCRYPTED TOKEN" variant="success" />
+        <StatusChip
+          status={isEventEnded ? 'EVENT CONCLUDED · EXPIRED' : 'VERIFIED ENCRYPTED TOKEN'}
+          variant={isEventEnded ? 'danger' : 'success'}
+        />
       </header>
 
       {/* Main Pass Viewport */}

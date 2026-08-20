@@ -13,6 +13,10 @@ export interface PassCardProps {
 }
 
 export function PassCard({ event, registration, className }: PassCardProps) {
+  const isEnded = event.eventEndDate
+    ? new Date(event.eventEndDate).getTime() <= Date.now()
+    : (event.eventDate ? new Date(event.eventDate).getTime() <= Date.now() : false);
+
   const formattedDate = new Date(event.eventDate).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -29,6 +33,7 @@ export function PassCard({ event, registration, className }: PassCardProps) {
     <div
       className={clsx(
         'w-full max-w-md mx-auto bg-surface border-2 border-border-rigid shadow-2xl font-mono relative overflow-hidden',
+        isEnded && 'opacity-95',
         className
       )}
     >
@@ -43,7 +48,10 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
           <div className="absolute top-3 right-3">
-            <StatusChip status="OFFICIAL PASS" variant="neutral" />
+            <StatusChip
+              status={isEnded ? 'EXPIRED' : 'OFFICIAL PASS'}
+              variant={isEnded ? 'danger' : 'neutral'}
+            />
           </div>
         </div>
       ) : (
@@ -51,7 +59,10 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           <span className="text-xs uppercase tracking-[0.25em] text-surface font-bold">
             VOUCH VERIFIED PASS
           </span>
-          <StatusChip status="ACTIVE" variant="success" />
+          <StatusChip
+            status={isEnded ? 'EXPIRED' : 'ACTIVE'}
+            variant={isEnded ? 'danger' : 'success'}
+          />
         </div>
       )}
 
@@ -105,29 +116,56 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           <div className="absolute -right-9 w-6 h-6 rounded-full bg-surface-highest border border-border-rigid" />
         </div>
 
-        {/* Dynamic Rotating QR Section */}
-        <div className="py-2">
-          <DynamicQrCode
-            registrationId={registration.id}
-            eventId={event.id}
-            totpSecret={registration.totpSecret}
-          />
-        </div>
+        {/* Dynamic Rotating QR or Still Expired Notice */}
+        {isEnded ? (
+          <div className="py-2 space-y-4">
+            <div className="py-8 px-4 border-2 border-border-rigid bg-surface-container text-center space-y-3">
+              <div className="text-4xl opacity-70">🎟️</div>
+              <div className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-widest text-accent block">
+                  EVENT CONCLUDED · PASS EXPIRED
+                </span>
+                <p className="text-[11px] text-muted-text max-w-xs mx-auto">
+                  This event has ended and gate admission is closed. Rotating cryptographic TOTP tokens are deactivated.
+                </p>
+              </div>
+            </div>
 
-        {/* Security Anti-Screenshot Banner */}
-        <div className="border border-border-rigid bg-surface-high p-3 text-center space-y-1">
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-accent">
-            ⚡ DO NOT SCREENSHOT
-          </p>
-          <p className="text-[9px] text-muted-text">
-            Security tokens rotate dynamically on a 30s cryptographic epoch. Static screenshots will fail at the gate.
-          </p>
-        </div>
+            <div className="border border-border-rigid bg-surface-high p-3 text-center space-y-1">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-text">
+                ARCHIVED ADMISSION RECORD
+              </p>
+              <p className="text-[9px] text-muted-text">
+                This card remains permanently in your account as your verified registration receipt.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="py-2">
+              <DynamicQrCode
+                registrationId={registration.id}
+                eventId={event.id}
+                totpSecret={registration.totpSecret}
+              />
+            </div>
+
+            {/* Security Anti-Screenshot Banner */}
+            <div className="border border-border-rigid bg-surface-high p-3 text-center space-y-1">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-accent">
+                ⚡ DO NOT SCREENSHOT
+              </p>
+              <p className="text-[9px] text-muted-text">
+                Security tokens rotate dynamically on a 30s cryptographic epoch. Static screenshots will fail at the gate.
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Footer Strip */}
       <div className="border-t border-border-rigid px-6 py-3 bg-surface-high flex items-center justify-between text-[9px] text-muted-text uppercase tracking-wider">
-        <span>VOUCH OS // RFC 6238</span>
+        <span>{isEnded ? 'VOUCH OS // ARCHIVED' : 'VOUCH OS // RFC 6238'}</span>
         <span>ID: {registration.id.slice(-8)}</span>
       </div>
     </div>
