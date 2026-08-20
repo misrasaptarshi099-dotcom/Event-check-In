@@ -1,5 +1,5 @@
 import { adminDb } from '@/lib/firebase/admin';
-import type { StatsBundle, CheckinTimeBucket, Checkin, EventItem } from '@/types';
+import type { StatsBundle, CheckinTimeBucket, Checkin, EventItem, Registration } from '@/types';
 
 /**
  * Computes a live StatsBundle for a given event.
@@ -20,23 +20,33 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   }
   const event = eventDoc.data() as EventItem;
 
-  // Fetch registration count
+  // Fetch active registrations and sum total booked seats
   const registrationsSnap = await adminDb
     .collection('registrations')
     .where('eventId', '==', eventId)
     .where('status', '==', 'active')
-    .count()
     .get();
-  const registeredCount = registrationsSnap.data().count;
 
-  // Fetch all check-ins
+  const regGuestMap = new Map<string, number>();
+  let registeredCount = 0;
+  for (const doc of registrationsSnap.docs) {
+    const data = doc.data() as Registration;
+    const guests = data.guestCount || 1;
+    regGuestMap.set(doc.id, guests);
+    registeredCount += guests;
+  }
+
+  // Fetch all check-ins and sum admitted seats
   const checkinsSnap = await adminDb
     .collection('events')
     .doc(eventId)
     .collection('checkins')
     .get();
   const checkins = checkinsSnap.docs.map((doc) => doc.data() as Checkin);
-  const checkedInCount = checkins.length;
+  let checkedInCount = 0;
+  for (const checkin of checkins) {
+    checkedInCount += regGuestMap.get(checkin.registrationId) || 1;
+  }
 
   // Determine if the event has concluded
   const now = Date.now();

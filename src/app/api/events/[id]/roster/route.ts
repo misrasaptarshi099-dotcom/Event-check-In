@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getRegistrationsByEvent } from '@/lib/services/registrations.service';
 import { getEventById } from '@/lib/services/events.service';
-import { verifyAuthToken, requireOwnership, requireRole } from '@/lib/security/rbac';
+import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, EXPORT_LIMIT } from '@/lib/security/rateLimit';
 import type { CachedRosterEntry } from '@/types';
 
@@ -20,8 +20,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
-
-    requireOwnership(user, event.organizerId);
 
     const rateLimitRes = checkRateLimit(getRateLimitKey(request, user.uid), EXPORT_LIMIT);
     if (rateLimitRes) return rateLimitRes;

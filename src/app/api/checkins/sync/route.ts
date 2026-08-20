@@ -26,6 +26,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
 
+    const scanTimeMs = clientScannedAt ? new Date(clientScannedAt).getTime() : Date.now();
+    const eventStartMs = new Date(event.eventDate).getTime();
+    const checkinOpenMs = eventStartMs - (30 * 60 * 1000);
+    const eventEndMs = event.eventEndDate
+      ? new Date(event.eventEndDate).getTime()
+      : eventStartMs + (3 * 60 * 60 * 1000);
+
+    if (scanTimeMs < checkinOpenMs) {
+      return NextResponse.json(
+        { error: 'Gate admission had not opened at time of scan (opens 30 mins before event start).' },
+        { status: 400 }
+      );
+    }
+    if (scanTimeMs >= eventEndMs) {
+      return NextResponse.json(
+        { error: 'Event was already concluded at time of scan.' },
+        { status: 400 }
+      );
+    }
+
     const registration = await getRegistrationById(registrationId);
     if (!registration || registration.eventId !== eventId) {
       return NextResponse.json({ error: 'Registration not found for this event.' }, { status: 404 });

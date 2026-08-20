@@ -110,16 +110,39 @@ export async function getRegistrationById(regId: string): Promise<Registration |
 }
 
 /**
- * Retrieves all registrations for an event.
+ * Retrieves all registrations for an event, joining check-in status for each attendee.
  */
 export async function getRegistrationsByEvent(eventId: string): Promise<Registration[]> {
-  const snapshot = await adminDb
-    .collection(REGISTRATIONS_COLLECTION)
-    .where('eventId', '==', eventId)
-    .get();
+  const [snapshot, checkinsSnap] = await Promise.all([
+    adminDb
+      .collection(REGISTRATIONS_COLLECTION)
+      .where('eventId', '==', eventId)
+      .get(),
+    adminDb
+      .collection('events')
+      .doc(eventId)
+      .collection('checkins')
+      .get(),
+  ]);
+
+  const checkinsMap = new Map<string, { checkedInAt: string }>();
+  for (const doc of checkinsSnap.docs) {
+    const data = doc.data();
+    checkinsMap.set(data.registrationId || doc.id, {
+      checkedInAt: data.checkedInAt || data.createdAt,
+    });
+  }
 
   return snapshot.docs
-    .map((doc) => doc.data() as Registration)
+    .map((doc) => {
+      const reg = doc.data() as Registration;
+      const checkin = checkinsMap.get(reg.id);
+      return {
+        ...reg,
+        checkedIn: !!checkin,
+        checkedInAt: checkin?.checkedInAt,
+      };
+    })
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
 

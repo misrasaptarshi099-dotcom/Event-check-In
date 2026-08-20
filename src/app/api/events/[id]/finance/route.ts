@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { computeEventFinance } from '@/lib/services/finance.service';
 import { getEventById } from '@/lib/services/events.service';
-import { verifyAuthToken, requireOwnership, requireRole } from '@/lib/security/rbac';
+import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, EXPORT_LIMIT } from '@/lib/security/rateLimit';
 
 interface RouteParams {
@@ -19,8 +19,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
-
-    requireOwnership(user, event.organizerId);
 
     // Rate limiting for financial analytics
     const rateLimitRes = checkRateLimit(getRateLimitKey(request, user.uid), EXPORT_LIMIT);

@@ -4,6 +4,7 @@ import React from 'react';
 import { clsx } from 'clsx';
 import { DynamicQrCode } from './DynamicQrCode';
 import { StatusChip } from '../ui/StatusChip';
+import { formatCurrency } from '@/lib/utils/format';
 import type { EventItem, Registration } from '@/types';
 
 export interface PassCardProps {
@@ -13,9 +14,14 @@ export interface PassCardProps {
 }
 
 export function PassCard({ event, registration, className }: PassCardProps) {
+  const now = Date.now();
+  const eventStartMs = new Date(event.eventDate).getTime();
+  const checkinOpenMs = eventStartMs - (30 * 60 * 1000);
+  const isGateOpen = now >= checkinOpenMs;
+
   const isEnded = event.eventEndDate
-    ? new Date(event.eventEndDate).getTime() <= Date.now()
-    : (event.eventDate ? new Date(event.eventDate).getTime() <= Date.now() : false);
+    ? new Date(event.eventEndDate).getTime() <= now
+    : (event.eventDate ? new Date(event.eventDate).getTime() <= now : false);
 
   const formattedDate = new Date(event.eventDate).toLocaleDateString('en-US', {
     weekday: 'short',
@@ -90,6 +96,7 @@ export function PassCard({ event, registration, className }: PassCardProps) {
             </span>
             <span className="font-semibold text-primary truncate block">
               {registration.attendeeName}
+              {(registration.guestCount || 1) > 1 && ` (+${(registration.guestCount || 1) - 1} Guests)`}
             </span>
             <span className="text-[10px] text-muted-text truncate block">
               {registration.attendeeEmail}
@@ -98,13 +105,20 @@ export function PassCard({ event, registration, className }: PassCardProps) {
 
           <div className="text-right">
             <span className="text-[9px] uppercase tracking-widest text-muted-text block">
-              REGISTRATION ID
+              RESERVATION · {registration.guestCount || 1} SEAT{(registration.guestCount || 1) > 1 ? 'S' : ''}
             </span>
             <span className="font-mono text-[10px] font-bold text-primary block truncate">
               {registration.id}
             </span>
             <span className="text-[10px] text-muted-text block">
-              {registration.ticketPrice ? `$${registration.ticketPrice} Paid` : 'Standard Admission'}
+              {(() => {
+                const seats = registration.guestCount || 1;
+                const unitPrice = registration.ticketPrice !== undefined ? registration.ticketPrice : (event.ticketPrice || 0);
+                const totalPaid = unitPrice * seats;
+                return totalPaid > 0
+                  ? `${formatCurrency(totalPaid, event.currency)} Paid`
+                  : 'Free Admission';
+              })()}
             </span>
           </div>
         </div>
@@ -153,10 +167,12 @@ export function PassCard({ event, registration, className }: PassCardProps) {
             {/* Security Anti-Screenshot Banner */}
             <div className="border border-border-rigid bg-surface-high p-3 text-center space-y-1">
               <p className="text-[10px] uppercase tracking-widest font-semibold text-accent">
-                ⚡ DO NOT SCREENSHOT
+                {isGateOpen ? '⚡ DO NOT SCREENSHOT' : '⏳ GATE ADMISSION PENDING'}
               </p>
               <p className="text-[9px] text-muted-text">
-                Security tokens rotate dynamically on a 30s cryptographic epoch. Static screenshots will fail at the gate.
+                {isGateOpen
+                  ? 'Security tokens rotate dynamically on a 30s cryptographic epoch. Static screenshots will fail at the gate.'
+                  : 'Gate scanning and ticket verification open 30 minutes prior to event start time.'}
               </p>
             </div>
           </>

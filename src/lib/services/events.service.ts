@@ -59,6 +59,16 @@ export async function getEventsByOrganizer(organizerId: string): Promise<EventIt
 }
 
 /**
+ * Retrieves the event portfolio available to the authorized organizer team.
+ * Event ownership remains recorded for auditing, but operational access is
+ * shared by the organization rather than tied to a single Firebase UID.
+ */
+export async function getAllOrganizerEvents(): Promise<EventItem[]> {
+  const snapshot = await adminDb.collection(EVENTS_COLLECTION).orderBy('createdAt', 'desc').get();
+  return snapshot.docs.map((doc) => doc.data() as EventItem);
+}
+
+/**
  * Retrieves all active upcoming public events for attendee discovery.
  * Filters out concluded events whose end time (or start time) is in the past,
  * and sorts upcoming events in chronological order by eventDate.

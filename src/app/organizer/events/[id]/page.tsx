@@ -47,11 +47,13 @@ export default function EventDashboardPage({ params }: PageParams) {
 
       // 1. Fetch Event details & Stats
       const [eventRes, statsRes] = await Promise.all([
-        fetch(`/api/events/${eventId}`, { headers: authHeader, signal }),
+        fetch(`/api/events/${eventId}?organizerOnly=true`, { headers: authHeader, signal }),
         fetch(`/api/events/${eventId}/stats`, { headers: authHeader, signal }),
       ]);
 
-      if (!eventRes.ok) throw new Error('Event not found.');
+      if (eventRes.status === 401 || eventRes.status === 403) throw new Error('Your organizer session has expired. Please sign in again.');
+      if (!eventRes.ok) { const eventError = await eventRes.json().catch(() => null); throw new Error(eventError?.error || 'Event not found.'); }
+      if (!statsRes.ok) { const statsError = await statsRes.json().catch(() => null); throw new Error(statsError?.error || 'Unable to load event operations.'); }
       const eventData = await eventRes.json();
       const statsData = await statsRes.json();
 
@@ -127,13 +129,21 @@ export default function EventDashboardPage({ params }: PageParams) {
     };
   }, [fetchData, showEditModal]);
 
+  const totalBookedSeats = registrations.reduce((sum, r) => sum + (r.guestCount || 1), 0);
+
   const tabs = [
     { id: 'operations', label: '📊 Operations & Live Gate', badge: stats ? `${stats.checkedInCount}/${stats.registeredCount}` : undefined },
     { id: 'finance', label: '💰 Finance & Revenue', badge: finance ? `$${finance.grossRevenue.toLocaleString()}` : undefined },
     { id: 'ai', label: '🧠 Gemini AI Intelligence' },
-    { id: 'roster', label: '👥 Attendee Roster', badge: registrations.length },
+    { id: 'roster', label: '👥 Attendee Roster', badge: totalBookedSeats > 0 ? `${totalBookedSeats} Seats` : undefined },
     { id: 'conflicts', label: '⚡ Sync & Conflicts', badge: syncLogs.length > 0 ? syncLogs.length : undefined },
   ];
+
+  const isEventConcluded = stats?.isEventFinished ?? (
+    event?.eventEndDate
+      ? new Date(event.eventEndDate).getTime() <= Date.now()
+      : (event?.eventDate ? new Date(event.eventDate).getTime() <= Date.now() : false)
+  );
 
   const rosterColumns: Column<Registration>[] = [
     {
@@ -174,12 +184,23 @@ export default function EventDashboardPage({ params }: PageParams) {
       key: 'status',
       header: 'Status',
       align: 'center',
-      render: (r) => (
-        <StatusChip
-          status={r.status.toUpperCase()}
-          variant={r.status === 'active' ? 'success' : 'danger'}
-        />
-      ),
+      render: (r) => {
+        if (r.status === 'cancelled') {
+          return <StatusChip status="CANCELLED" variant="danger" />;
+        }
+        if (r.checkedIn) {
+          return (
+            <StatusChip
+              status={isEventConcluded ? 'ATTENDED' : 'CHECKED IN'}
+              variant="success"
+            />
+          );
+        }
+        if (isEventConcluded) {
+          return <StatusChip status="NO SHOW" variant="danger" />;
+        }
+        return <StatusChip status="CONFIRMED" variant="neutral" />;
+      },
     },
     {
       key: 'createdAt',

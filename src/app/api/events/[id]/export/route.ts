@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getRegistrationsByEvent } from '@/lib/services/registrations.service';
 import { getCheckinsByEvent } from '@/lib/services/checkins.service';
 import { getEventById } from '@/lib/services/events.service';
-import { verifyAuthToken, requireOwnership, requireRole } from '@/lib/security/rbac';
+import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, EXPORT_LIMIT } from '@/lib/security/rateLimit';
 
 interface RouteParams {
@@ -21,8 +21,6 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
 
-    requireOwnership(user, event.organizerId);
-
     const rateLimitRes = checkRateLimit(getRateLimitKey(request, user.uid), EXPORT_LIMIT);
     if (rateLimitRes) return rateLimitRes;
 
@@ -36,13 +34,21 @@ export async function GET(request: Request, { params }: RouteParams) {
       checkinMap.set(c.registrationId, c);
     }
 
+    const now = Date.now();
+    const isEventConcluded = event.eventEndDate
+      ? new Date(event.eventEndDate).getTime() <= now
+      : new Date(event.eventDate).getTime() <= now;
+
     // Build CSV content
     const headers = [
       'Registration ID',
       'Attendee Name',
       'Attendee Email',
-      'Ticket Price',
+      'Seats Booked',
+      'Unit Ticket Price',
+      'Total Paid',
       'Status',
+      'Lifecycle Status',
       'Checked In',
       'Check-in Timestamp',
       'Station ID',
@@ -51,12 +57,28 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const rows = registrations.map((r) => {
       const checkin = checkinMap.get(r.id);
+      const seats = r.guestCount || 1;
+      const unitPrice = r.ticketPrice ?? event.ticketPrice ?? 0;
+      const totalPaid = unitPrice * seats;
+
+      let lifecycleStatus = 'CONFIRMED';
+      if (r.status === 'cancelled') {
+        lifecycleStatus = 'CANCELLED';
+      } else if (checkin) {
+        lifecycleStatus = isEventConcluded ? 'ATTENDED' : 'CHECKED IN';
+      } else if (isEventConcluded) {
+        lifecycleStatus = 'NO SHOW';
+      }
+
       return [
         `"${r.id}"`,
         `"${r.attendeeName.replace(/"/g, '""')}"`,
         `"${r.attendeeEmail.replace(/"/g, '""')}"`,
-        r.ticketPrice ?? event.ticketPrice ?? 0,
+        seats,
+        unitPrice,
+        totalPaid,
         `"${r.status}"`,
+        `"${lifecycleStatus}"`,
         checkin ? 'YES' : 'NO',
         checkin ? `"${checkin.checkedInAt}"` : '""',
         checkin ? `"${checkin.stationId}"` : '""',

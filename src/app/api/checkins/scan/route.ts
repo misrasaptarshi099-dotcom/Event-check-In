@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { performCheckin, CheckinError } from '@/lib/services/checkins.service';
 import { getRegistrationById } from '@/lib/services/registrations.service';
+import { getEventById } from '@/lib/services/events.service';
 import { parseAndVerifyQrPayload, verifyTotpToken } from '@/lib/security/totp';
 import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, CHECKIN_SCAN_LIMIT } from '@/lib/security/rateLimit';
@@ -47,6 +48,35 @@ export async function POST(request: Request) {
         message: 'Missing registration ID or event ID.',
       };
       return NextResponse.json(outcome, { status: 400 });
+    }
+
+    // Validate Event Check-in Window: Scan permitted starting 30 minutes before event start time
+    const event = await getEventById(targetEventId);
+    if (event) {
+      const now = Date.now();
+      const eventStartMs = new Date(event.eventDate).getTime();
+      const checkinOpenMs = eventStartMs - (30 * 60 * 1000);
+
+      if (now < checkinOpenMs) {
+        const opensAtStr = new Date(checkinOpenMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const outcome: ScanOutcome = {
+          status: 'INVALID',
+          message: `Gate check-in has not opened yet. Admission opens at ${opensAtStr} (30 mins prior to event start).`,
+        };
+        return NextResponse.json(outcome, { status: 400 });
+      }
+
+      const eventEndMs = event.eventEndDate
+        ? new Date(event.eventEndDate).getTime()
+        : eventStartMs + (3 * 60 * 60 * 1000);
+
+      if (now >= eventEndMs) {
+        const outcome: ScanOutcome = {
+          status: 'INVALID',
+          message: 'This event has concluded. Gate check-in is closed.',
+        };
+        return NextResponse.json(outcome, { status: 400 });
+      }
     }
 
     // Fetch authoritative registration

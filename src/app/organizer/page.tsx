@@ -19,6 +19,7 @@ export default function OrganizerDashboard() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Event Edit & Delete State
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
@@ -35,40 +36,26 @@ export default function OrganizerDashboard() {
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSuccess, setTeamSuccess] = useState<string | null>(null);
 
-  const fetchOrganizers = async () => {
-    const token = await getFreshAuthToken();
-    if (!token) return;
-
-    try {
-      const res = await fetch('/api/organizers', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.organizers) {
-        setOrganizers(data.organizers);
-      }
-    } catch (err) {
-      console.error('Failed to load organizers:', err);
-    }
+  const fetchOrganizers = async (token?: string) => {
+    const authToken = token || await getFreshAuthToken();
+    if (!authToken) return;
+    const res = await fetch('/api/organizers', { headers: { Authorization: `Bearer ${authToken}` } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unable to load organizer access.');
+    setOrganizers(data.organizers || []);
   };
 
-  const fetchEvents = async () => {
-    const token = await getFreshAuthToken();
-    if (!token) return;
-
+  const fetchEvents = async (token?: string) => {
+    const authToken = token || await getFreshAuthToken();
+    if (!authToken) { window.location.href = '/auth/login'; return; }
+    setLoading(true); setLoadError(null);
     try {
-      const res = await fetch('/api/events?organizerOnly=true', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch('/api/events?organizerOnly=true', { headers: { Authorization: `Bearer ${authToken}` } });
       const data = await res.json();
-      if (data.events) {
-        setEvents(data.events);
-      }
-    } catch (err) {
-      console.error('Failed to load events:', err);
-    } finally {
-      setLoading(false);
-    }
+      if (!res.ok) throw new Error(data.error || 'Unable to load the event portfolio.');
+      setEvents(data.events || []);
+    } catch (err: any) { setLoadError(err.message || 'Unable to load the event portfolio. Please try again.'); }
+    finally { setLoading(false); }
   };
 
   const handleDeleteEvent = async () => {
@@ -109,8 +96,12 @@ export default function OrganizerDashboard() {
       return;
     }
 
-    fetchEvents();
-    fetchOrganizers();
+    const loadDashboard = async () => {
+      const token = await getFreshAuthToken();
+      if (!token) { window.location.href = '/auth/login'; return; }
+      await Promise.all([fetchEvents(token), fetchOrganizers(token)]).catch((err: any) => setLoadError(err.message || 'Unable to load organizer access. Please try again.'));
+    };
+    void loadDashboard();
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user && user.email) {
@@ -130,7 +121,7 @@ export default function OrganizerDashboard() {
     setTeamError(null);
     setTeamSuccess(null);
 
-    const token = localStorage.getItem('vouch_auth_token');
+    const token = await getFreshAuthToken();
 
     try {
       const res = await fetch('/api/organizers', {
@@ -162,7 +153,7 @@ export default function OrganizerDashboard() {
     setTeamError(null);
     setTeamSuccess(null);
 
-    const token = localStorage.getItem('vouch_auth_token');
+    const token = await getFreshAuthToken();
 
     try {
       const res = await fetch(`/api/organizers/${encodeURIComponent(emailToRemove)}`, {
@@ -261,6 +252,13 @@ export default function OrganizerDashboard() {
             </Link>
           </div>
         </div>
+
+        {loadError && (
+          <div className="border border-accent bg-accent/10 p-4 text-sm text-accent flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span>[!] {loadError}</span>
+            <Button variant="outline" size="sm" onClick={() => fetchEvents()}>Try again</Button>
+          </div>
+        )}
 
         {loading ? (
           <div className="p-16 text-center border border-border-rigid text-xs text-muted-text animate-pulse">

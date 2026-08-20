@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createEvent, getEventsByOrganizer, getAllPublicEvents } from '@/lib/services/events.service';
+import { createEvent, getAllOrganizerEvents, getAllPublicEvents } from '@/lib/services/events.service';
 import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, REGISTRATION_LIMIT } from '@/lib/security/rateLimit';
 
@@ -10,14 +10,9 @@ export async function GET(request: Request) {
 
     // If explicit organizer portfolio requested
     if (organizerOnly) {
-      const authHeader = request.headers.get('Authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const user = await verifyAuthToken(authHeader);
-        if (user.role === 'organizer') {
-          const events = await getEventsByOrganizer(user.uid);
-          return NextResponse.json({ events });
-        }
-      }
+      const user = await verifyAuthToken(request.headers.get('Authorization'));
+      requireRole(user, 'organizer');
+      return NextResponse.json({ events: await getAllOrganizerEvents() });
     }
 
     // Default fast path: Return all public events

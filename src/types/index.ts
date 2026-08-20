@@ -42,6 +42,8 @@ export interface Registration {
   status: RegistrationStatus;
   guestCount: number; // Number of seats reserved (1–5, includes the registrant)
   ticketPrice?: number;
+  checkedIn?: boolean;
+  checkedInAt?: string;
   createdAt: string;
 }
 

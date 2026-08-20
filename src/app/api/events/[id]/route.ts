@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getEventById, updateEvent, deleteEvent } from '@/lib/services/events.service';
-import { verifyAuthToken, requireOwnership, requireRole } from '@/lib/security/rbac';
+import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -10,6 +10,9 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
+    if (new URL(request.url).searchParams.get('organizerOnly') === 'true') {
+      requireRole(await verifyAuthToken(request.headers.get('Authorization')), 'organizer');
+    }
     const event = await getEventById(id);
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
@@ -31,8 +34,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
-
-    requireOwnership(user, event.organizerId);
 
     const body = await request.json();
     const { name, description, eventDate, eventEndDate, capacity, timezone, venue, bannerUrl, ticketPrice, currency } = body;
@@ -70,8 +71,6 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
-
-    requireOwnership(user, event.organizerId);
 
     await deleteEvent(id);
     return NextResponse.json({ success: true });

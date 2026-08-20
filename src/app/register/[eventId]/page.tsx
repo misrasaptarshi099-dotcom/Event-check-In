@@ -6,10 +6,24 @@ import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider, getFreshAuthToken } from '@/lib/firebase/client';
 import { Button, Input, StatusChip, ProgressBar } from '@/components/ui';
+import { formatCurrency } from '@/lib/utils/format';
 import type { EventItem } from '@/types';
 
 interface PageParams {
   params: Promise<{ eventId: string }>;
+}
+
+async function readApiJson<T>(response: Response): Promise<T> {
+  const body = await response.text();
+  try {
+    return body ? JSON.parse(body) as T : {} as T;
+  } catch {
+    throw new Error(
+      response.ok
+        ? 'The event service returned an invalid response. Please refresh and try again.'
+        : `The event service is temporarily unavailable (${response.status}). Please try again shortly.`
+    );
+  }
 }
 
 export default function AttendeeRegistrationPage({ params }: PageParams) {
@@ -30,13 +44,14 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
   // 1. Fetch Event metadata
   useEffect(() => {
     fetch(`/api/events/${eventId}`)
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await readApiJson<{ event?: EventItem; error?: string }>(res);
+        if (!res.ok) throw new Error(data.error || `Unable to load this event (${res.status}).`);
+        return data;
+      })
       .then((data) => {
-        if (data.event) {
-          setEvent(data.event);
-        } else {
-          setError(data.error || 'Event not found.');
-        }
+        if (data.event) setEvent(data.event);
+        else setError(data.error || 'Event not found.');
       })
       .catch((err) => setError(err.message || 'Failed to fetch event.'))
       .finally(() => setLoading(false));
@@ -116,10 +131,13 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
         }),
       });
 
-      const data = await res.json();
+      const data = await readApiJson<{ registration?: { id: string }; error?: string }>(res);
 
       if (!res.ok) {
         throw new Error(data.error || 'Registration failed.');
+      }
+      if (!data.registration) {
+        throw new Error('Registration completed without a pass. Please try again.');
       }
 
       localStorage.setItem(`vouch_ticket_${data.registration.id}`, JSON.stringify(data.registration));
@@ -384,7 +402,7 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
                   className="w-full text-sm font-bold uppercase tracking-wider mt-2"
                 >
                   {event?.ticketPrice
-                    ? `Reserve ${guestCount} Seat${guestCount > 1 ? 's' : ''} · $${event.ticketPrice * guestCount}`
+                    ? `Reserve ${guestCount} Seat${guestCount > 1 ? 's' : ''} · ${formatCurrency(event.ticketPrice * guestCount, event.currency)}`
                     : `Claim ${guestCount} Free Pass${guestCount > 1 ? 'es' : ''}`}
                 </Button>
               </form>

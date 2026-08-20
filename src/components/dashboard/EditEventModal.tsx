@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button, Input, ImageUpload } from '@/components/ui';
+import { getFreshAuthToken } from '@/lib/firebase/client';
 import type { EventItem } from '@/types';
 
 interface EditEventModalProps {
@@ -66,7 +67,7 @@ export function EditEventModal({ event, isOpen, onClose, onEventUpdated }: EditE
     setLoading(true);
     setError(null);
 
-    const token = localStorage.getItem('vouch_auth_token');
+    const token = await getFreshAuthToken();
     if (!token) {
       setError('You must be signed in as an organizer.');
       setLoading(false);

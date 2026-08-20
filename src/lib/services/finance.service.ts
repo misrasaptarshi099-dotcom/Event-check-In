@@ -42,26 +42,37 @@ export async function computeEventFinance(eventId: string): Promise<FinanceBundl
   const activeRegistrations = registrations.filter((r) => r.status === 'active');
   const cancelledRegistrations = registrations.filter((r) => r.status === 'cancelled');
 
-  const paidTicketsCount = activeRegistrations.length;
-  const unpaidTicketsCount = cancelledRegistrations.length;
+  // Sum total booked seats/tickets across active and cancelled registrations
+  const paidTicketsCount = activeRegistrations.reduce((sum, r) => sum + (r.guestCount || 1), 0);
+  const unpaidTicketsCount = cancelledRegistrations.reduce((sum, r) => sum + (r.guestCount || 1), 0);
 
-  const grossRevenue = paidTicketsCount * ticketPrice;
-  const refundedAmount = unpaidTicketsCount * ticketPrice;
+  const grossRevenue = activeRegistrations.reduce((sum, r) => {
+    const price = r.ticketPrice !== undefined ? r.ticketPrice : ticketPrice;
+    return sum + (price * (r.guestCount || 1));
+  }, 0);
+
+  const refundedAmount = cancelledRegistrations.reduce((sum, r) => {
+    const price = r.ticketPrice !== undefined ? r.ticketPrice : ticketPrice;
+    return sum + (price * (r.guestCount || 1));
+  }, 0);
+
   const netRevenue = grossRevenue; // Net after cancellations
 
   const projectedRevenue = (event.capacity || 0) * ticketPrice;
   const occupancyFinancialRate =
     projectedRevenue > 0 ? Math.round((grossRevenue / projectedRevenue) * 100) : (paidTicketsCount > 0 ? 100 : 0);
 
-  const averageOrderValue = paidTicketsCount > 0 ? ticketPrice : 0;
+  const averageOrderValue = activeRegistrations.length > 0 ? Math.round(grossRevenue / activeRegistrations.length) : 0;
 
-  // Build transaction ledger
+  // Build transaction ledger with guestCount-scaled amounts
   const recentTransactions: TransactionEntry[] = registrations.map((r) => ({
     id: `tx_${r.id}`,
     registrationId: r.id,
-    attendeeName: r.attendeeName,
+    attendeeName: (r.guestCount || 1) > 1
+      ? `${r.attendeeName} (+${r.guestCount - 1} ${r.guestCount === 2 ? 'Guest' : 'Guests'})`
+      : r.attendeeName,
     attendeeEmail: r.attendeeEmail,
-    amount: r.ticketPrice ?? ticketPrice,
+    amount: (r.ticketPrice !== undefined ? r.ticketPrice : ticketPrice) * (r.guestCount || 1),
     currency,
     status: r.status === 'active' ? 'completed' : 'refunded',
     createdAt: r.createdAt,
