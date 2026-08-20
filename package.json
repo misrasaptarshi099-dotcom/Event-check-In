@@ -14,7 +14,7 @@
     "test:all": "npm run typecheck && npm run test:capacity-race && npm run test:checkin-race && npm run test:rbac"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^2.18.0",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "firebase": "^11.0.2",

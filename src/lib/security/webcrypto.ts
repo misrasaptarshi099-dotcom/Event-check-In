@@ -7,16 +7,32 @@
 
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
-const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_ITERATIONS = 600_000;
+const MIN_PASSPHRASE_LENGTH = 12;
 
 /**
- * Derives an AES-GCM 256-bit CryptoKey from a user PIN/passphrase via PBKDF2.
+ * Validates the passphrase meets minimum entropy requirements.
+ * Rejects short numeric PINs in favor of meaningful passphrases.
  */
-async function deriveKey(pin: string, salt: Uint8Array): Promise<CryptoKey> {
+function validatePassphrase(passphrase: string): void {
+  if (!passphrase || passphrase.length < MIN_PASSPHRASE_LENGTH) {
+    throw new Error(
+      `Passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters. ` +
+      'Short numeric PINs do not provide sufficient entropy for roster encryption.'
+    );
+  }
+}
+
+/**
+ * Derives an AES-GCM 256-bit CryptoKey from a user passphrase via PBKDF2.
+ */
+async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+  validatePassphrase(passphrase);
+
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(pin),
+    encoder.encode(passphrase),
     'PBKDF2',
     false,
     ['deriveKey']
@@ -37,15 +53,15 @@ async function deriveKey(pin: string, salt: Uint8Array): Promise<CryptoKey> {
 }
 
 /**
- * Encrypts plaintext data using AES-GCM 256-bit with a PIN-derived key.
+ * Encrypts plaintext data using AES-GCM 256-bit with a passphrase-derived key.
  *
  * Output format: [16-byte salt][12-byte IV][ciphertext]
  */
-export async function encrypt(plaintext: string, pin: string): Promise<ArrayBuffer> {
+export async function encrypt(plaintext: string, passphrase: string): Promise<ArrayBuffer> {
   const encoder = new TextEncoder();
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-  const key = await deriveKey(pin, salt);
+  const key = await deriveKey(passphrase, salt);
 
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
@@ -63,11 +79,11 @@ export async function encrypt(plaintext: string, pin: string): Promise<ArrayBuff
 }
 
 /**
- * Decrypts AES-GCM 256-bit encrypted data using a PIN-derived key.
+ * Decrypts AES-GCM 256-bit encrypted data using a passphrase-derived key.
  *
  * Input format: [16-byte salt][12-byte IV][ciphertext]
  */
-export async function decrypt(encryptedBuffer: ArrayBuffer, pin: string): Promise<string> {
+export async function decrypt(encryptedBuffer: ArrayBuffer, passphrase: string): Promise<string> {
   const decoder = new TextDecoder();
   const data = new Uint8Array(encryptedBuffer);
 
@@ -75,7 +91,7 @@ export async function decrypt(encryptedBuffer: ArrayBuffer, pin: string): Promis
   const iv = data.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
   const ciphertext = data.slice(SALT_LENGTH + IV_LENGTH);
 
-  const key = await deriveKey(pin, salt);
+  const key = await deriveKey(passphrase, salt);
 
   const plaintext = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv },
@@ -89,14 +105,14 @@ export async function decrypt(encryptedBuffer: ArrayBuffer, pin: string): Promis
 /**
  * Encrypts a roster array to an ArrayBuffer for IndexedDB storage.
  */
-export async function encryptRoster<T>(roster: T[], pin: string): Promise<ArrayBuffer> {
-  return encrypt(JSON.stringify(roster), pin);
+export async function encryptRoster<T>(roster: T[], passphrase: string): Promise<ArrayBuffer> {
+  return encrypt(JSON.stringify(roster), passphrase);
 }
 
 /**
  * Decrypts an ArrayBuffer from IndexedDB back to the roster array.
  */
-export async function decryptRoster<T>(encryptedBuffer: ArrayBuffer, pin: string): Promise<T[]> {
-  const json = await decrypt(encryptedBuffer, pin);
+export async function decryptRoster<T>(encryptedBuffer: ArrayBuffer, passphrase: string): Promise<T[]> {
+  const json = await decrypt(encryptedBuffer, passphrase);
   return JSON.parse(json) as T[];
 }

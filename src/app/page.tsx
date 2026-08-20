@@ -49,24 +49,6 @@ export default function HomePage() {
               Register for Event
             </Button>
           </div>
-
-          {/* Feature Grid */}
-          <div className="border border-border-rigid divide-y divide-border-rigid text-left">
-            {[
-              { label: 'HR-1', title: 'Atomic Check-In', desc: 'Database-level uniqueness. Zero duplicates under any concurrency.' },
-              { label: 'HR-2', title: 'Dynamic QR Codes', desc: 'RFC 6238 TOTP rotation every 30s. Screenshots expire instantly.' },
-              { label: 'HR-3', title: 'Offline Scanner', desc: 'Full check-in capability without network. Auto-sync on reconnect.' },
-              { label: 'HR-4', title: 'AI Event Insights', desc: 'Natural language queries over live stats. Gemini-powered, never hallucinates.' },
-            ].map((feature) => (
-              <div key={feature.label} className="grid-ledger-row flex items-center gap-6 px-6 py-5 cursor-default">
-                <StatusChip status={feature.label} variant="neutral" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-mono font-medium tracking-wide">{feature.title}</p>
-                  <p className="text-xs font-mono text-muted-text mt-0.5 muted-label">{feature.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </main>
 

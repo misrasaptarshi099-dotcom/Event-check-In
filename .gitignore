@@ -43,7 +43,6 @@ CURSORRULES
 .env.test.local
 .env.production
 .env.production.local
-.env.example
 .env.sample
 .env.template
 *.pem

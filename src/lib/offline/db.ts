@@ -34,6 +34,7 @@ let dbPromise: Promise<IDBPDatabase<VouchDB>> | null = null;
 
 /**
  * Opens (or creates) the VOUCH IndexedDB database.
+ * Clears the cached promise on failure so subsequent calls can retry.
  */
 export function getDB(): Promise<IDBPDatabase<VouchDB>> {
   if (!dbPromise) {
@@ -47,6 +48,10 @@ export function getDB(): Promise<IDBPDatabase<VouchDB>> {
         // Roster cache store
         db.createObjectStore('roster', { keyPath: 'eventId' });
       },
+    }).catch((err) => {
+      // Clear cache so next call retries initialization
+      dbPromise = null;
+      throw err;
     });
   }
   return dbPromise;
@@ -71,7 +76,18 @@ export async function getPendingScans(): Promise<OfflineQueuedScan[]> {
 }
 
 /**
- * Updates the sync status of a queued scan.
+ * Retrieves scans in 'syncing' or 'failed' states for drain recovery.
+ */
+export async function getRecoverableScans(): Promise<OfflineQueuedScan[]> {
+  const db = await getDB();
+  const syncing = await db.getAllFromIndex('scanQueue', 'by-status', 'syncing');
+  const failed = await db.getAllFromIndex('scanQueue', 'by-status', 'failed');
+  return [...syncing, ...failed];
+}
+
+/**
+ * Updates the sync status of a queued scan within a single readwrite transaction
+ * to prevent concurrent writers from overwriting intervening changes.
  */
 export async function updateScanStatus(
   clientScanId: string,
@@ -79,12 +95,15 @@ export async function updateScanStatus(
   syncResult?: OfflineQueuedScan['syncResult']
 ): Promise<void> {
   const db = await getDB();
-  const scan = await db.get('scanQueue', clientScanId);
+  const tx = db.transaction('scanQueue', 'readwrite');
+  const store = tx.objectStore('scanQueue');
+  const scan = await store.get(clientScanId);
   if (scan) {
     scan.syncStatus = status;
     if (syncResult) scan.syncResult = syncResult;
-    await db.put('scanQueue', scan);
+    await store.put(scan);
   }
+  await tx.done;
 }
 
 /**

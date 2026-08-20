@@ -26,7 +26,7 @@ export async function verifyAuthToken(authHeader: string | null): Promise<Authen
   const idToken = authHeader.replace('Bearer ', '');
 
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
+    const decoded = await adminAuth.verifyIdToken(idToken, true);
     return {
       uid: decoded.uid,
       email: decoded.email || '',

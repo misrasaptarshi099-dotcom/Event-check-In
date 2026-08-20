@@ -5,6 +5,7 @@ const EVENTS_COLLECTION = 'events';
 
 /**
  * Creates a new event document in Firestore.
+ * Omits description when not provided to avoid storing undefined in Firebase.
  */
 export async function createEvent(
   data: Omit<EventItem, 'id' | 'createdAt' | 'spotsRemaining'>
@@ -16,12 +17,16 @@ export async function createEvent(
     id: docRef.id,
     organizerId: data.organizerId,
     name: data.name,
-    description: data.description,
     eventDate: data.eventDate,
     capacity: data.capacity,
     spotsRemaining: data.capacity,
     createdAt: now,
   };
+
+  // Only include description if provided (don't write undefined to Firebase)
+  if (data.description !== undefined) {
+    event.description = data.description;
+  }
 
   await docRef.set(event);
   return event;
@@ -51,12 +56,38 @@ export async function getEventsByOrganizer(organizerId: string): Promise<EventIt
 
 /**
  * Updates mutable fields on an event document.
+ *
+ * Capacity changes are handled transactionally:
+ * The delta between old and new capacity is applied to spotsRemaining,
+ * clamped to a minimum of 0 to prevent negative values.
  */
 export async function updateEvent(
   eventId: string,
   updates: Partial<Pick<EventItem, 'name' | 'description' | 'eventDate' | 'capacity'>>
 ): Promise<void> {
-  await adminDb.collection(EVENTS_COLLECTION).doc(eventId).update(updates);
+  const eventRef = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
+
+  if (updates.capacity !== undefined) {
+    // Transactional capacity update to maintain spotsRemaining consistency
+    await adminDb.runTransaction(async (transaction) => {
+      const eventSnap = await transaction.get(eventRef);
+      if (!eventSnap.exists) {
+        throw new Error(`Event ${eventId} not found.`);
+      }
+
+      const current = eventSnap.data() as EventItem;
+      const capacityDelta = updates.capacity! - current.capacity;
+      const newSpotsRemaining = Math.max(0, current.spotsRemaining + capacityDelta);
+
+      transaction.update(eventRef, {
+        ...updates,
+        spotsRemaining: newSpotsRemaining,
+      });
+    });
+  } else {
+    // No capacity change — simple update
+    await eventRef.update(updates);
+  }
 }
 
 /**

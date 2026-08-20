@@ -37,8 +37,8 @@ service cloud.firestore {
 
       // ─── Checkins Subcollection (keyed by registrationId) ───────────
       match /checkins/{registrationId} {
-        // Organizers and staff can read check-in records
-        allow read: if isOrganizer();
+        // Only the owning organizer of the parent event can read check-in records
+        allow read: if isOwner(get(/databases/$(database)/documents/events/$(eventId)).data.organizerId);
 
         // Checkins are created via server-side admin SDK transactions only
         // This rule blocks direct client writes as an extra safety layer
@@ -48,10 +48,11 @@ service cloud.firestore {
 
     // ─── Registrations Collection ───────────────────────────────────────
     match /registrations/{regId} {
-      // Attendees can read their own registration
-      // Organizers can read all registrations for their events
+      // Attendees can read their own registration (excluding totpSecret via client query)
+      // Owning organizer can read registrations for their events
       allow read: if isAuthenticated()
-                  && (request.auth.uid == resource.data.attendeeId || isOrganizer());
+                  && (request.auth.uid == resource.data.attendeeId
+                      || isOwner(get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId));
 
       // Registrations are created via server-side admin SDK transactions only
       // This rule blocks direct client writes to enforce atomic capacity checks
@@ -60,8 +61,8 @@ service cloud.firestore {
 
     // ─── Checkin Sync Log Collection ────────────────────────────────────
     match /checkin_sync_log/{logId} {
-      // Only organizers can read sync logs
-      allow read: if isOrganizer();
+      // Only the owning organizer of the related event can read sync logs
+      allow read: if isOwner(get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId);
 
       // Sync logs are written via server-side admin SDK only
       allow write: if false;

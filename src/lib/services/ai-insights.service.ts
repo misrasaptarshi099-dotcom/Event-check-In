@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { computeEventStats } from './stats.service';
 import type { StatsBundle } from '@/types';
 
@@ -14,8 +14,9 @@ const MAX_OUTPUT_TOKENS = 500;
  * Budget Guardrails:
  * - Uses cost-efficient gemini-3.5-flash-lite model
  * - Strict maxOutputTokens: 500
- * - 8-second hard timeout with fallback to raw stats
+ * - 8-second hard timeout via SDK httpOptions
  * - Rate limited upstream in the API route handler
+ * - Fallback to raw stats on any failure
  */
 export async function getAiInsight(
   eventId: string,
@@ -26,7 +27,7 @@ export async function getAiInsight(
 
   // 2. Attempt Gemini AI response
   try {
-    const answer = await queryGeminiWithTimeout(stats, question);
+    const answer = await queryGemini(stats, question);
     return { answer, stats, source: 'ai' };
   } catch (error) {
     // 3. Fallback to raw statistics summary
@@ -37,9 +38,9 @@ export async function getAiInsight(
 }
 
 /**
- * Queries Gemini with a strict timeout.
+ * Queries Gemini using the @google/genai SDK with built-in timeout.
  */
-async function queryGeminiWithTimeout(stats: StatsBundle, question: string): Promise<string> {
+async function queryGemini(stats: StatsBundle, question: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
@@ -47,13 +48,9 @@ async function queryGeminiWithTimeout(stats: StatsBundle, question: string): Pro
     throw new Error('GEMINI_API_KEY is not configured.');
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    generationConfig: {
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
-      temperature: 0.3,
-    },
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: { timeout: GEMINI_TIMEOUT_MS },
   });
 
   const systemPrompt = `You are VOUCH AI, an event analytics assistant for event organizers.
@@ -67,16 +64,22 @@ ${JSON.stringify(stats, null, 2)}
 
 ORGANIZER QUESTION: ${question}`;
 
-  // Race between Gemini call and timeout
-  const result = await Promise.race([
-    model.generateContent([systemPrompt, statsContext]),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Gemini API timeout (8s)')), GEMINI_TIMEOUT_MS)
-    ),
-  ]);
+  // Build generation config — omit temperature for Gemini 3.x models (uses SDK default)
+  const isGemini3 = modelName.startsWith('gemini-3');
+  const generationConfig = {
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    ...(isGemini3 ? {} : { temperature: 0.3 }),
+  };
 
-  const response = result.response;
-  const text = response.text();
+  const response = await ai.models.generateContent({
+    model: modelName,
+    contents: [
+      { role: 'user', parts: [{ text: systemPrompt + '\n\n' + statsContext }] },
+    ],
+    config: generationConfig,
+  });
+
+  const text = response.text;
 
   if (!text || text.trim().length === 0) {
     throw new Error('Empty response from Gemini.');

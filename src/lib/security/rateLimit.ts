@@ -21,6 +21,8 @@ export interface RateLimitConfig {
 
 interface RateLimitEntry {
   timestamps: number[];
+  /** Window duration in ms, stored per entry to support heterogeneous limits */
+  windowMs: number;
 }
 
 // In-memory store (per serverless instance)
@@ -30,13 +32,13 @@ const store = new Map<string, RateLimitEntry>();
 const CLEANUP_INTERVAL_MS = 60_000;
 let lastCleanup = Date.now();
 
-function cleanup(windowMs: number): void {
+function cleanup(): void {
   const now = Date.now();
   if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
   lastCleanup = now;
 
-  const cutoff = now - windowMs;
   for (const [key, entry] of store) {
+    const cutoff = now - entry.windowMs;
     entry.timestamps = entry.timestamps.filter((ts) => ts > cutoff);
     if (entry.timestamps.length === 0) {
       store.delete(key);
@@ -57,11 +59,11 @@ export function checkRateLimit(
   const windowMs = config.windowSeconds * 1000;
   const bucketKey = `${config.prefix}:${key}`;
 
-  cleanup(windowMs);
+  cleanup();
 
   let entry = store.get(bucketKey);
   if (!entry) {
-    entry = { timestamps: [] };
+    entry = { timestamps: [], windowMs };
     store.set(bucketKey, entry);
   }
 
@@ -98,14 +100,20 @@ export function checkRateLimit(
 
 /**
  * Extracts a rate-limit key from the request.
- * Uses the user UID if available, otherwise falls back to IP.
+ * Uses the user UID if available, otherwise falls back to the platform-provided
+ * client address header. On Vercel, this is `x-real-ip` (set by the trusted edge proxy).
+ *
+ * Deployment requirement: traffic must pass through the platform proxy that sets
+ * the trusted header. Direct-to-origin traffic will fall back to 'unknown'.
  */
 export function getRateLimitKey(request: Request, userId?: string): string {
   if (userId) return userId;
 
-  const forwarded = request.headers.get('x-forwarded-for');
-  const ip = forwarded?.split(',')[0]?.trim() || 'unknown';
-  return ip;
+  // Prefer platform-provided trusted client IP (Vercel / nginx)
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+
+  return 'unknown';
 }
 
 // ─── Pre-configured Rate Limit Presets ──────────────────────────────

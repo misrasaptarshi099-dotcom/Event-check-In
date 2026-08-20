@@ -20,6 +20,7 @@ export interface EventItem {
   name: string;
   description?: string;
   eventDate: string; // ISO date string
+  timezone?: string; // IANA timezone (e.g. 'America/New_York'), defaults to 'UTC'
   capacity: number;
   spotsRemaining: number;
   createdAt: string;
@@ -86,10 +87,10 @@ export interface StatsBundle {
 }
 
 export interface QrPayload {
-  regId: string;
-  token: string;
-  otp: string;
-  ts: number;
+  r: string; // registration_id
+  e: string; // event_id
+  t: string; // totp code (6 digits)
+  ts: number; // timestamp in seconds
 }
 
 export type ScanStatusType = 'CONFIRMED' | 'PROVISIONAL' | 'DUPLICATE' | 'INVALID' | 'CONFLICT';

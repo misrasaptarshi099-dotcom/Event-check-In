@@ -8,8 +8,8 @@ import type { StatsBundle, CheckinTimeBucket, Checkin, EventItem } from '@/types
  * - Total capacity & spots remaining
  * - Registered count
  * - Checked-in count
- * - No-show count and percentage
- * - 15-minute check-in distribution histogram
+ * - No-show count and percentage (clamped to 0)
+ * - 15-minute check-in distribution histogram (timezone-aware)
  * - Peak check-in bucket
  */
 export async function computeEventStats(eventId: string): Promise<StatsBundle> {
@@ -38,17 +38,31 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   const checkins = checkinsSnap.docs.map((doc) => doc.data() as Checkin);
   const checkedInCount = checkins.length;
 
-  // Compute no-show metrics
-  const noShowCount = registeredCount - checkedInCount;
+  // Compute no-show metrics (clamped to 0 to handle cancelled registrations)
+  const noShowCount = Math.max(0, registeredCount - checkedInCount);
   const noShowPct = registeredCount > 0 ? Math.round((noShowCount / registeredCount) * 100) : 0;
 
-  // Compute 15-minute distribution
+  // Resolve event timezone for stable bucketing across deployments
+  const eventTimezone = event.timezone || 'UTC';
+
+  // Compute 15-minute distribution using event timezone
   const bucketMap = new Map<string, number>();
   for (const checkin of checkins) {
     const date = new Date(checkin.checkedInAt);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minuteBucket = (Math.floor(date.getMinutes() / 15) * 15).toString().padStart(2, '0');
-    const bucketKey = `${hours}:${minuteBucket}`;
+    // Use Intl.DateTimeFormat for timezone-aware hour/minute extraction
+    const parts = new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: eventTimezone,
+    }).formatToParts(date);
+
+    const hourPart = parts.find((p) => p.type === 'hour')?.value || '00';
+    const minutePart = parts.find((p) => p.type === 'minute')?.value || '00';
+    const minuteBucket = (Math.floor(parseInt(minutePart) / 15) * 15)
+      .toString()
+      .padStart(2, '0');
+    const bucketKey = `${hourPart}:${minuteBucket}`;
     bucketMap.set(bucketKey, (bucketMap.get(bucketKey) || 0) + 1);
   }
 
