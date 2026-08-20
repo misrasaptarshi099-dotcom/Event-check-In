@@ -1,0 +1,102 @@
+name: CI & Concurrency Testing Suite
+
+on:
+  push:
+    branches:
+      - feat/*
+      - fix/*
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Strict Check
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+  concurrency-and-rbac-tests:
+    name: Concurrency & RBAC Invariant Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Capacity Race Test (HR-1)
+        run: npm run test:capacity-race
+        env:
+          NODE_ENV: test
+
+      - name: Run Single Check-in Race Test (HR-1)
+        run: npm run test:checkin-race
+        env:
+          NODE_ENV: test
+
+      - name: Run RBAC Security Tests
+        run: npm run test:rbac
+        env:
+          NODE_ENV: test
+
+  build-verification:
+    name: Production Build Verification
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, concurrency-and-rbac-tests]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Next.js Production Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: mock-api-key
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: mock-project
+          GEMINI_API_KEY: mock-gemini-key
+
+  security-audit:
+    name: Security & Vulnerability Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Dependency Audit
+        run: npm audit --audit-level=critical
+        continue-on-error: false
