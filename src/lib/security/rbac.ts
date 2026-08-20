@@ -1,17 +1,11 @@
 import { adminAuth } from '@/lib/firebase/admin';
+import { isAuthorizedOrganizer, SEED_ORGANIZER_EMAILS } from '@/lib/services/organizers.service';
 import type { UserRole } from '@/types';
 
-/**
- * Default authorized organizer emails.
- * Any user signing in with these Google accounts is automatically assigned the Organizer role.
- */
-export const DEFAULT_ORGANIZER_EMAILS: string[] = [
-  'misrsaptarshi099@gmail.com',
-  'misrasaptarshi099@gmail.com',
-];
+export { SEED_ORGANIZER_EMAILS };
 
 /**
- * Checks if a given email is designated as an Organizer.
+ * Synchronously checks if an email matches seed organizer list.
  */
 export function isOrganizerEmail(email?: string | null): boolean {
   if (!email) return false;
@@ -21,7 +15,7 @@ export function isOrganizerEmail(email?: string | null): boolean {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 
-  return DEFAULT_ORGANIZER_EMAILS.includes(normalized) || envList.includes(normalized);
+  return SEED_ORGANIZER_EMAILS.includes(normalized) || envList.includes(normalized);
 }
 
 /**
@@ -60,12 +54,13 @@ export async function verifyAuthToken(authHeader: string | null): Promise<Authen
   try {
     const decoded = await adminAuth.verifyIdToken(token, true);
     const email = decoded.email || '';
-    const hasOrganizerEmail = isOrganizerEmail(email);
 
-    let role: UserRole = hasOrganizerEmail ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
+    // Check if email is an authorized organizer (seed or database)
+    const hasOrganizerAccess = await isAuthorizedOrganizer(email);
+    let role: UserRole = hasOrganizerAccess ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
 
-    // If user has an organizer email but custom claim not set yet, set it in background
-    if (hasOrganizerEmail && decoded.role !== 'organizer') {
+    // If user is an authorized organizer but custom claim not set yet, set it in background
+    if (hasOrganizerAccess && decoded.role !== 'organizer') {
       try {
         await adminAuth.setCustomUserClaims(decoded.uid, { role: 'organizer' });
       } catch (claimErr) {

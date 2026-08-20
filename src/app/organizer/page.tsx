@@ -2,13 +2,45 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button, StatusChip, ProgressBar } from '@/components/ui';
+import { Button, Input, StatusChip, ProgressBar } from '@/components/ui';
 import type { EventItem } from '@/types';
+
+interface OrganizerRecord {
+  email: string;
+  addedBy: string;
+  createdAt: string;
+  isPrimary?: boolean;
+}
 
 export default function OrganizerDashboard() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Team Management State
+  const [organizers, setOrganizers] = useState<OrganizerRecord[]>([]);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [newOrganizerEmail, setNewOrganizerEmail] = useState('');
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
+  const [teamSuccess, setTeamSuccess] = useState<string | null>(null);
+
+  const fetchOrganizers = async () => {
+    const token = localStorage.getItem('vouch_auth_token');
+    if (!token) return;
+
+    try {
+      const res = await fetch('/api/organizers', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.organizers) {
+        setOrganizers(data.organizers);
+      }
+    } catch (err) {
+      console.error('Failed to load organizers:', err);
+    }
+  };
 
   useEffect(() => {
     const role = localStorage.getItem('vouch_user_role');
@@ -36,7 +68,67 @@ export default function OrganizerDashboard() {
       })
       .catch((err) => console.error('Failed to load events:', err))
       .finally(() => setLoading(false));
+
+    fetchOrganizers();
   }, []);
+
+  const handleAddOrganizer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTeamLoading(true);
+    setTeamError(null);
+    setTeamSuccess(null);
+
+    const token = localStorage.getItem('vouch_auth_token');
+
+    try {
+      const res = await fetch('/api/organizers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ email: newOrganizerEmail.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add organizer.');
+
+      setTeamSuccess(`Organizer ${newOrganizerEmail} authorized successfully.`);
+      setNewOrganizerEmail('');
+      await fetchOrganizers();
+    } catch (err: any) {
+      setTeamError(err.message);
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  const handleRemoveOrganizer = async (emailToRemove: string) => {
+    if (!confirm(`Are you sure you want to revoke organizer access for ${emailToRemove}?`)) return;
+
+    setTeamLoading(true);
+    setTeamError(null);
+    setTeamSuccess(null);
+
+    const token = localStorage.getItem('vouch_auth_token');
+
+    try {
+      const res = await fetch(`/api/organizers/${encodeURIComponent(emailToRemove)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to remove organizer.');
+
+      setTeamSuccess(`Organizer ${emailToRemove} revoked.`);
+      await fetchOrganizers();
+    } catch (err: any) {
+      setTeamError(err.message);
+    } finally {
+      setTeamLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('vouch_user_role');
@@ -70,6 +162,14 @@ export default function OrganizerDashboard() {
               <span className="text-muted-text truncate max-w-[180px]">{userEmail}</span>
             </div>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTeamModal(true)}
+            title="Manage Authorized Organizers"
+          >
+            👥 Team Access
+          </Button>
           <Link href="/scanner">
             <Button variant="outline" size="sm">
               📷 Fast Gate Scanner
@@ -98,11 +198,16 @@ export default function OrganizerDashboard() {
             </p>
           </div>
 
-          <Link href="/organizer/create">
-            <Button variant="primary" size="md">
-              + New Event Studio
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="md" onClick={() => setShowTeamModal(true)}>
+              👥 Manage Organizers ({organizers.length})
             </Button>
-          </Link>
+            <Link href="/organizer/create">
+              <Button variant="primary" size="md">
+                + New Event Studio
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {loading ? (
@@ -227,6 +332,94 @@ export default function OrganizerDashboard() {
           </div>
         )}
       </main>
+
+      {/* Team & Organizers Management Modal */}
+      {showTeamModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-surface border-2 border-border-rigid w-full max-w-xl shadow-2xl p-6 sm:p-8 space-y-6">
+            <div className="flex items-center justify-between border-b border-border-rigid pb-3">
+              <div>
+                <h3 className="text-xl font-serif italic text-primary font-medium tracking-tight">
+                  Authorized Organizer Team
+                </h3>
+                <p className="text-[10px] text-muted-text uppercase tracking-widest mt-0.5">
+                  Only existing organizers can authorize new administrative accounts
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTeamModal(false)}
+                className="text-xs font-mono font-bold hover:text-accent p-1 cursor-pointer"
+              >
+                ✕ CLOSE
+              </button>
+            </div>
+
+            {teamError && (
+              <div className="border border-accent bg-accent/10 p-2.5 text-xs text-accent">
+                [!] {teamError}
+              </div>
+            )}
+
+            {teamSuccess && (
+              <div className="border border-[#15803D] bg-[#15803D]/10 p-2.5 text-xs text-[#15803D]">
+                [✓] {teamSuccess}
+              </div>
+            )}
+
+            {/* Add Organizer Form */}
+            <form onSubmit={handleAddOrganizer} className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Input
+                  label="New Organizer Google Email"
+                  type="email"
+                  placeholder="colleague@gmail.com"
+                  value={newOrganizerEmail}
+                  onChange={(e) => setNewOrganizerEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" variant="accent" size="md" loading={teamLoading}>
+                + Authorize
+              </Button>
+            </form>
+
+            {/* Current Organizers List */}
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase tracking-widest text-muted-text font-bold block">
+                Active Authorized Organizers ({organizers.length})
+              </span>
+              <div className="border border-border-rigid divide-y divide-border-rigid max-h-60 overflow-y-auto">
+                {organizers.map((org) => (
+                  <div key={org.email} className="p-3 flex items-center justify-between bg-surface-high">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-semibold text-primary">
+                          {org.email}
+                        </span>
+                        {org.isPrimary && (
+                          <StatusChip status="PRIMARY SEED" variant="critical" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-muted-text">
+                        Added by {org.addedBy}
+                      </p>
+                    </div>
+
+                    {!org.isPrimary && (
+                      <button
+                        onClick={() => handleRemoveOrganizer(org.email)}
+                        className="text-[10px] uppercase font-bold text-accent hover:underline cursor-pointer"
+                      >
+                        Revoke Access
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

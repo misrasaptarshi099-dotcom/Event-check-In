@@ -5,12 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase/client';
-import { isOrganizerEmail } from '@/lib/security/rbac';
 import { Button, StatusChip } from '@/components/ui';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [role, setRole] = useState<'organizer' | 'attendee'>('organizer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,9 +22,16 @@ export default function LoginPage() {
       const idToken = await user.getIdToken();
       const userEmail = user.email || '';
 
-      // Determine role: misrsaptarshi099@gmail.com and authorized emails are automatically organizers
-      const isOrganizer = isOrganizerEmail(userEmail);
-      const resolvedRole: 'organizer' | 'attendee' = isOrganizer ? 'organizer' : role === 'organizer' && !isOrganizer ? 'attendee' : role;
+      // Verify authoritative role on backend
+      const res = await fetch('/api/auth/check-role', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      const data = await res.json();
+      const resolvedRole: 'organizer' | 'attendee' = data.role === 'organizer' ? 'organizer' : 'attendee';
 
       localStorage.setItem('vouch_user_role', resolvedRole);
       localStorage.setItem('vouch_user_uid', user.uid);
@@ -81,7 +86,7 @@ export default function LoginPage() {
             Access Control
           </span>
         </Link>
-        <StatusChip status="AUTHENTICATION PORTAL" variant="neutral" />
+        <StatusChip status="SECURE AUTHENTICATION" variant="neutral" />
       </header>
 
       {/* Main Form Container */}
@@ -92,46 +97,9 @@ export default function LoginPage() {
               Sign In to VOUCH
             </h1>
             <p className="text-[11px] text-muted-text uppercase tracking-wider">
-              Authenticate with Google OAuth for Concurrency-Safe Operations
+              Single Sign-On with Google OAuth
             </p>
           </div>
-
-          {/* Role Toggle Switch */}
-          <div className="grid grid-cols-2 border border-border-rigid bg-surface-high">
-            <button
-              type="button"
-              onClick={() => setRole('organizer')}
-              className={`py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                role === 'organizer'
-                  ? 'bg-primary text-surface'
-                  : 'text-muted-text hover:text-primary'
-              }`}
-            >
-              Organizer Portal
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole('attendee')}
-              className={`py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                role === 'attendee'
-                  ? 'bg-primary text-surface'
-                  : 'text-muted-text hover:text-primary'
-              }`}
-            >
-              Attendee Pass
-            </button>
-          </div>
-
-          {/* Organizer Note */}
-          {role === 'organizer' && (
-            <div className="border border-border-rigid p-3 bg-surface-low text-[11px] text-muted-text space-y-1">
-              <span className="font-semibold text-primary block">🔑 Designated Organizer:</span>
-              <p className="font-mono text-accent">misrsaptarshi099@gmail.com</p>
-              <p className="text-[10px]">
-                Sign in with this Google account to access full event analytics, financials, and gate scanner controls.
-              </p>
-            </div>
-          )}
 
           {error && (
             <div className="border border-accent bg-accent/10 p-3 text-xs text-accent">
@@ -140,7 +108,7 @@ export default function LoginPage() {
           )}
 
           {/* Google OAuth Button */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <button
               type="button"
               onClick={handleGoogleSignIn}
@@ -166,11 +134,27 @@ export default function LoginPage() {
                   d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                 />
               </svg>
-              <span>{loading ? 'Authenticating...' : `Continue with Google (${role})`}</span>
+              <span>{loading ? 'Authenticating...' : 'Continue with Google'}</span>
             </button>
           </div>
 
-          {/* Quick Demo Fill Buttons */}
+          {/* Access Tier Explanation */}
+          <div className="border border-border-rigid p-4 bg-surface-low text-[11px] text-muted-text space-y-2">
+            <div className="flex items-center gap-1.5 font-semibold text-primary">
+              <span>🔒</span>
+              <span className="uppercase">Role Governance:</span>
+            </div>
+            <ul className="space-y-1 text-[10px] list-disc list-inside">
+              <li>
+                <strong className="text-primary">Attendees:</strong> Instant registration, ticketing pass issuance, and check-in history.
+              </li>
+              <li>
+                <strong className="text-primary">Organizers:</strong> Strictly restricted to approved administrators (e.g. <span className="font-mono text-accent">misrsaptarshi099@gmail.com</span> or team members invited by an existing organizer).
+              </li>
+            </ul>
+          </div>
+
+          {/* Local Dev & Testing Bypass */}
           <div className="border-t border-border-rigid pt-4 space-y-2 text-center">
             <p className="text-[10px] uppercase tracking-widest text-muted-text">
               Local Dev & Testing Bypass:
