@@ -42,8 +42,31 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
     let localScanner: Html5Qrcode | null = null;
     const elementId = 'vouch-reader';
 
+    // Catch and ignore browser media AbortErrors triggered during rapid mount/unmount
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (
+        event.reason?.name === 'AbortError' ||
+        String(event.reason?.message || '').includes('play()') ||
+        String(event.reason || '').includes('The play() request was interrupted')
+      ) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
     const startScanner = async () => {
+      // Small delay to ensure DOM element is settled
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (!isMounted) return;
+
       try {
+        stopAllMediaTracks();
+        const container = document.getElementById(elementId);
+        if (container) {
+          container.innerHTML = '';
+        }
+
         localScanner = new Html5Qrcode(elementId);
         html5QrCodeRef.current = localScanner;
 
@@ -65,44 +88,55 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
 
         // Prefer environment-facing camera, falling back to enumerated camera ID
         try {
+          if (!isMounted) return;
           await localScanner.start(
             { facingMode: 'environment' },
             config,
             scanSuccessCallback,
             scanFailureCallback
           );
-        } catch {
+        } catch (facingErr: any) {
+          if (!isMounted) return;
+          if (facingErr?.name === 'AbortError') return;
+
           // Fallback to enumerated cameras if facingMode fails
-          const cameras = await Html5Qrcode.getCameras();
-          if (!isMounted) {
-            stopAllMediaTracks();
-            return;
-          }
-          if (cameras && cameras.length > 0) {
-            const cameraId = cameras[cameras.length - 1].id;
-            await localScanner.start(
-              cameraId,
-              config,
-              scanSuccessCallback,
-              scanFailureCallback
-            );
-          } else {
-            throw new Error('No camera devices detected.');
+          try {
+            const cameras = await Html5Qrcode.getCameras();
+            if (!isMounted) {
+              stopAllMediaTracks();
+              return;
+            }
+            if (cameras && cameras.length > 0) {
+              const cameraId = cameras[cameras.length - 1].id;
+              await localScanner.start(
+                cameraId,
+                config,
+                scanSuccessCallback,
+                scanFailureCallback
+              );
+            } else {
+              throw new Error('No camera devices detected.');
+            }
+          } catch (camErr: any) {
+            if (camErr?.name === 'AbortError') return;
+            throw camErr;
           }
         }
 
         if (isMounted) {
           setScannerReady(true);
+          setHasCamera(true);
         } else {
           // Unmounted while start was resolving
           if (localScanner.isScanning) {
             await localScanner.stop().catch(() => {});
           }
-          localScanner.clear();
+          try { localScanner.clear(); } catch {}
           html5QrCodeRef.current = null;
           stopAllMediaTracks();
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
         console.warn('Camera access not granted or unavailable:', err);
         if (isMounted) setHasCamera(false);
         html5QrCodeRef.current = null;
@@ -116,6 +150,7 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
 
     return () => {
       isMounted = false;
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       const scanner = html5QrCodeRef.current || localScanner;
       html5QrCodeRef.current = null;
       if (scanner) {
