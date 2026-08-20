@@ -51,17 +51,19 @@ export default function HomePage() {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/scanner">
-            <Button variant="outline" size="sm">
-              📷 Fast Gate Scanner
-            </Button>
-          </Link>
           {role === 'organizer' && (
-            <Link href="/organizer">
-              <Button variant="secondary" size="sm">
-                Organizer Portal
-              </Button>
-            </Link>
+            <>
+              <Link href="/scanner">
+                <Button variant="outline" size="sm">
+                  📷 Fast Gate Scanner
+                </Button>
+              </Link>
+              <Link href="/organizer">
+                <Button variant="secondary" size="sm">
+                  Organizer Portal
+                </Button>
+              </Link>
+            </>
           )}
           {role ? (
             <Button variant="ghost" size="sm" onClick={handleLogout}>
@@ -69,8 +71,8 @@ export default function HomePage() {
             </Button>
           ) : (
             <Link href="/auth/login">
-              <Button variant="ghost" size="sm">
-                Login
+              <Button variant="primary" size="sm">
+                Login / Sign In
               </Button>
             </Link>
           )}
@@ -112,30 +114,23 @@ export default function HomePage() {
                 </Link>
               </>
             ) : role === 'attendee' ? (
-              <>
-                <a href="#events-ledger" className="w-full sm:w-auto">
-                  <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
-                    Browse Events
-                  </Button>
-                </a>
-                <Link href="/scanner" className="w-full sm:w-auto">
-                  <Button variant="primary" size="lg" className="w-full sm:w-auto min-w-[200px]">
-                    📷 Fast Gate Scanner
-                  </Button>
-                </Link>
-              </>
+              <a href="#events-ledger" className="w-full sm:w-auto">
+                <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                  Browse Public Events
+                </Button>
+              </a>
             ) : (
               <>
                 <Link href="/auth/login" className="w-full sm:w-auto">
                   <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
-                    Sign In / Access
+                    Sign In / Register
                   </Button>
                 </Link>
-                <Link href="/scanner" className="w-full sm:w-auto">
+                <a href="#events-ledger" className="w-full sm:w-auto">
                   <Button variant="outline" size="lg" className="w-full sm:w-auto min-w-[200px]">
-                    📷 Fast Gate Scanner
+                    Browse Events
                   </Button>
-                </Link>
+                </a>
               </>
             )}
           </div>
@@ -156,25 +151,18 @@ export default function HomePage() {
                 Loading events ledger...
               </div>
             ) : events.length === 0 ? (
-              <div className="border border-border-rigid p-8 text-center space-y-3 bg-surface-low">
+              <div className="border border-border-rigid p-8 text-center space-y-2 bg-surface-low">
                 <p className="font-serif italic text-sm text-primary">No events published yet.</p>
                 {role === 'organizer' ? (
-                  <Link href="/organizer/create">
+                  <Link href="/organizer/create" className="inline-block pt-2">
                     <Button variant="secondary" size="sm">
                       + Create Your First Event
                     </Button>
                   </Link>
                 ) : (
-                  <div className="space-y-2">
-                    <p className="text-[11px] text-muted-text">
-                      Sign in as an organizer to host and publish new events.
-                    </p>
-                    <Link href="/auth/login">
-                      <Button variant="secondary" size="sm">
-                        Sign In as Organizer
-                      </Button>
-                    </Link>
-                  </div>
+                  <p className="text-[11px] text-muted-text">
+                    Please check back soon for open registrations and admission passes.
+                  </p>
                 )}
               </div>
             ) : (
