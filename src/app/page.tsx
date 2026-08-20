@@ -6,20 +6,33 @@ import { Button, StatusChip } from '@/components/ui';
 import type { EventItem } from '@/types';
 
 export default function HomePage() {
+  const [role, setRole] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setRole(localStorage.getItem('vouch_user_role'));
+
     fetch('/api/events')
       .then((res) => res.json())
       .then((data) => {
         if (data.events) {
           setEvents(data.events);
+        } else if (data.error) {
+          console.error('API Error:', data.error);
         }
       })
       .catch((err) => console.error('Failed to load events:', err))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('vouch_user_role');
+    localStorage.removeItem('vouch_user_uid');
+    localStorage.removeItem('vouch_user_email');
+    localStorage.removeItem('vouch_auth_token');
+    window.location.reload();
+  };
 
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">
@@ -43,11 +56,24 @@ export default function HomePage() {
               📷 Fast Gate Scanner
             </Button>
           </Link>
-          <Link href="/organizer">
-            <Button variant="secondary" size="sm">
-              Organizer Portal
+          {role === 'organizer' && (
+            <Link href="/organizer">
+              <Button variant="secondary" size="sm">
+                Organizer Portal
+              </Button>
+            </Link>
+          )}
+          {role ? (
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              Logout
             </Button>
-          </Link>
+          ) : (
+            <Link href="/auth/login">
+              <Button variant="ghost" size="sm">
+                Login
+              </Button>
+            </Link>
+          )}
         </div>
       </header>
 
@@ -72,20 +98,50 @@ export default function HomePage() {
 
           {/* CTA Row */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/organizer" className="w-full sm:w-auto">
-              <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
-                Organizer Workspace
-              </Button>
-            </Link>
-            <Link href="/organizer/create" className="w-full sm:w-auto">
-              <Button variant="primary" size="lg" className="w-full sm:w-auto min-w-[200px]">
-                Create New Event
-              </Button>
-            </Link>
+            {role === 'organizer' ? (
+              <>
+                <Link href="/organizer" className="w-full sm:w-auto">
+                  <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    Organizer Workspace
+                  </Button>
+                </Link>
+                <Link href="/organizer/create" className="w-full sm:w-auto">
+                  <Button variant="primary" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    Create New Event
+                  </Button>
+                </Link>
+              </>
+            ) : role === 'attendee' ? (
+              <>
+                <a href="#events-ledger" className="w-full sm:w-auto">
+                  <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    Browse Events
+                  </Button>
+                </a>
+                <Link href="/scanner" className="w-full sm:w-auto">
+                  <Button variant="primary" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    📷 Fast Gate Scanner
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/login" className="w-full sm:w-auto">
+                  <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    Sign In / Access
+                  </Button>
+                </Link>
+                <Link href="/scanner" className="w-full sm:w-auto">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    📷 Fast Gate Scanner
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Active Public Events Ledger */}
-          <div className="text-left space-y-3 pt-6 border-t border-border-rigid">
+          <div id="events-ledger" className="text-left space-y-3 pt-6 border-t border-border-rigid">
             <div className="flex items-center justify-between">
               <h3 className="text-xs uppercase tracking-widest font-bold text-muted-text">
                 Active Events Ledger
@@ -102,11 +158,24 @@ export default function HomePage() {
             ) : events.length === 0 ? (
               <div className="border border-border-rigid p-8 text-center space-y-3 bg-surface-low">
                 <p className="font-serif italic text-sm text-primary">No events published yet.</p>
-                <Link href="/organizer/create">
-                  <Button variant="secondary" size="sm">
-                    + Create Your First Event
-                  </Button>
-                </Link>
+                {role === 'organizer' ? (
+                  <Link href="/organizer/create">
+                    <Button variant="secondary" size="sm">
+                      + Create Your First Event
+                    </Button>
+                  </Link>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-muted-text">
+                      Sign in as an organizer to host and publish new events.
+                    </p>
+                    <Link href="/auth/login">
+                      <Button variant="secondary" size="sm">
+                        Sign In as Organizer
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="border border-border-rigid divide-y divide-border-rigid">
@@ -144,11 +213,13 @@ export default function HomePage() {
                           Register
                         </Button>
                       </Link>
-                      <Link href={`/organizer/events/${event.id}`}>
-                        <Button variant="outline" size="sm">
-                          Dashboard
-                        </Button>
-                      </Link>
+                      {role === 'organizer' && (
+                        <Link href={`/organizer/events/${event.id}`}>
+                          <Button variant="outline" size="sm">
+                            Dashboard
+                          </Button>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}

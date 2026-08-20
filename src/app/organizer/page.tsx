@@ -10,7 +10,13 @@ export default function OrganizerDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('vouch_auth_token') || 'demo-organizer-token';
+    const role = localStorage.getItem('vouch_user_role');
+    const token = localStorage.getItem('vouch_auth_token');
+
+    if (!token || role !== 'organizer') {
+      window.location.href = '/auth/login';
+      return;
+    }
 
     fetch('/api/events', {
       headers: {
@@ -21,11 +27,21 @@ export default function OrganizerDashboard() {
       .then((data) => {
         if (data.events) {
           setEvents(data.events);
+        } else if (data.error) {
+          console.error('API Error:', data.error);
         }
       })
       .catch((err) => console.error('Failed to load events:', err))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('vouch_user_role');
+    localStorage.removeItem('vouch_user_uid');
+    localStorage.removeItem('vouch_user_email');
+    localStorage.removeItem('vouch_auth_token');
+    window.location.href = '/';
+  };
 
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">
@@ -54,6 +70,9 @@ export default function OrganizerDashboard() {
               + Create Event
             </Button>
           </Link>
+          <Button variant="ghost" size="sm" onClick={handleLogout}>
+            Logout
+          </Button>
         </div>
       </header>
 

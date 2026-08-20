@@ -10,6 +10,15 @@ export default function CreateEventPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    const role = localStorage.getItem('vouch_user_role');
+    const token = localStorage.getItem('vouch_auth_token');
+
+    if (!token || role !== 'organizer') {
+      window.location.href = '/auth/login';
+    }
+  }, []);
+
   // Form State
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -27,7 +36,10 @@ export default function CreateEventPage() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('vouch_auth_token') || 'demo-organizer-token';
+      const token = localStorage.getItem('vouch_auth_token');
+      if (!token) {
+        throw new Error('You must be signed in as an organizer to create events.');
+      }
 
       const res = await fetch('/api/events', {
         method: 'POST',
@@ -78,11 +90,26 @@ export default function CreateEventPage() {
           </span>
         </div>
 
-        <Link href="/organizer">
-          <Button variant="outline" size="sm">
-            Cancel & Return
+        <div className="flex items-center gap-3">
+          <Link href="/organizer">
+            <Button variant="outline" size="sm">
+              Cancel & Return
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              localStorage.removeItem('vouch_user_role');
+              localStorage.removeItem('vouch_user_uid');
+              localStorage.removeItem('vouch_user_email');
+              localStorage.removeItem('vouch_auth_token');
+              window.location.href = '/';
+            }}
+          >
+            Logout
           </Button>
-        </Link>
+        </div>
       </header>
 
       {/* Main Studio Grid */}

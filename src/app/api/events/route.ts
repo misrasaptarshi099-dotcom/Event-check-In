@@ -4,23 +4,28 @@ import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, REGISTRATION_LIMIT } from '@/lib/security/rateLimit';
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('Authorization');
+  try {
+    const authHeader = request.headers.get('Authorization');
 
-  // If authenticated as organizer, return their events; otherwise return public events
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    try {
-      const user = await verifyAuthToken(authHeader);
-      if (user.role === 'organizer') {
-        const events = await getEventsByOrganizer(user.uid);
-        return NextResponse.json({ events });
+    // If authenticated as organizer, return their events; otherwise return public events
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const user = await verifyAuthToken(authHeader);
+        if (user.role === 'organizer') {
+          const events = await getEventsByOrganizer(user.uid);
+          return NextResponse.json({ events });
+        }
+      } catch {
+        // Fall through to public events
       }
-    } catch {
-      // Fall through to public events
     }
-  }
 
-  const events = await getAllPublicEvents();
-  return NextResponse.json({ events });
+    const events = await getAllPublicEvents();
+    return NextResponse.json({ events });
+  } catch (error: any) {
+    console.error('Failed to fetch events:', error);
+    return NextResponse.json({ events: [], error: error.message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

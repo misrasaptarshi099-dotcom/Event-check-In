@@ -28,7 +28,14 @@ export default function EventDashboardPage({ params }: PageParams) {
 
   const fetchData = React.useCallback(async () => {
     try {
-      const token = localStorage.getItem('vouch_auth_token') || 'demo-organizer-token';
+      const role = localStorage.getItem('vouch_user_role');
+      const token = localStorage.getItem('vouch_auth_token');
+
+      if (!token || role !== 'organizer') {
+        window.location.href = '/auth/login';
+        return;
+      }
+
       const authHeader = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch Event details & Stats
@@ -168,6 +175,19 @@ export default function EventDashboardPage({ params }: PageParams) {
               🔗 Registration Pass
             </Button>
           </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              localStorage.removeItem('vouch_user_role');
+              localStorage.removeItem('vouch_user_uid');
+              localStorage.removeItem('vouch_user_email');
+              localStorage.removeItem('vouch_auth_token');
+              window.location.href = '/';
+            }}
+          >
+            Logout
+          </Button>
         </div>
       </header>
 
