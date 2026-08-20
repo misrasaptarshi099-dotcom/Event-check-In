@@ -1,0 +1,139 @@
+import {
+  getPendingScans,
+  updateScanStatus,
+  clearSyncedScans,
+} from './db';
+import type { OfflineQueuedScan, SyncResult } from '@/types';
+
+/**
+ * Offline Sync Manager — Idempotent Queue Drain (HR-3)
+ *
+ * When the scanner device regains network connectivity:
+ * 1. Reads all pending scans from IndexedDB.
+ * 2. Submits each scan to the server sync endpoint.
+ * 3. Updates scan status based on server response.
+ * 4. Handles duplicate conflicts gracefully (no data loss).
+ * 5. Cleans up successfully synced entries.
+ *
+ * Each scan carries a unique `clientScanId` for idempotent replay.
+ */
+
+const SYNC_ENDPOINT = '/api/checkins/sync';
+const MAX_CONCURRENT_SYNCS = 5;
+const RETRY_DELAY_MS = 2_000;
+const MAX_RETRIES = 3;
+
+/**
+ * Drains the offline queue by syncing all pending scans to the server.
+ * Returns a summary of sync results.
+ */
+export async function drainOfflineQueue(): Promise<{
+  total: number;
+  synced: number;
+  conflicts: number;
+  failed: number;
+}> {
+  const pending = await getPendingScans();
+  const results = { total: pending.length, synced: 0, conflicts: 0, failed: 0 };
+
+  if (pending.length === 0) return results;
+
+  // Process in batches to limit concurrent requests
+  for (let i = 0; i < pending.length; i += MAX_CONCURRENT_SYNCS) {
+    const batch = pending.slice(i, i + MAX_CONCURRENT_SYNCS);
+    const batchResults = await Promise.allSettled(
+      batch.map((scan) => syncSingleScan(scan))
+    );
+
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        const outcome = result.value;
+        if (outcome === 'success') results.synced++;
+        else if (outcome === 'duplicate_conflict') results.conflicts++;
+        else results.failed++;
+      } else {
+        results.failed++;
+      }
+    }
+  }
+
+  // Clean up successfully synced entries
+  await clearSyncedScans();
+
+  return results;
+}
+
+/**
+ * Syncs a single scan to the server with retry logic.
+ */
+async function syncSingleScan(
+  scan: OfflineQueuedScan,
+  attempt = 1
+): Promise<SyncResult> {
+  try {
+    await updateScanStatus(scan.clientScanId, 'syncing');
+
+    const response = await fetch(SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: scan.eventId,
+        registrationId: scan.registrationId,
+        qrToken: scan.qrToken,
+        otp: scan.otp,
+        stationId: scan.stationId,
+        clientScanId: scan.clientScanId,
+        clientScannedAt: scan.clientScannedAt,
+      }),
+    });
+
+    if (response.ok) {
+      await updateScanStatus(scan.clientScanId, 'synced', 'success');
+      return 'success';
+    }
+
+    if (response.status === 409) {
+      // Duplicate conflict — expected for multi-station scenarios
+      await updateScanStatus(scan.clientScanId, 'conflict', 'duplicate_conflict');
+      return 'duplicate_conflict';
+    }
+
+    // Server error — retry
+    if (attempt < MAX_RETRIES) {
+      await delay(RETRY_DELAY_MS * attempt);
+      return syncSingleScan(scan, attempt + 1);
+    }
+
+    await updateScanStatus(scan.clientScanId, 'failed', 'error');
+    return 'error';
+  } catch {
+    if (attempt < MAX_RETRIES) {
+      await delay(RETRY_DELAY_MS * attempt);
+      return syncSingleScan(scan, attempt + 1);
+    }
+
+    await updateScanStatus(scan.clientScanId, 'failed', 'error');
+    return 'error';
+  }
+}
+
+/**
+ * Registers a listener for online/offline events to auto-trigger sync.
+ */
+export function registerAutoSync(): () => void {
+  const handler = () => {
+    if (navigator.onLine) {
+      console.log('[VOUCH SYNC] Network restored — draining offline queue...');
+      drainOfflineQueue().then((results) => {
+        console.log('[VOUCH SYNC] Drain complete:', results);
+      });
+    }
+  };
+
+  window.addEventListener('online', handler);
+  return () => window.removeEventListener('online', handler);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

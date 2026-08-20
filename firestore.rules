@@ -1,0 +1,75 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ───────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOrganizer() {
+      return isAuthenticated() && request.auth.token.role == 'organizer';
+    }
+
+    function isAttendee() {
+      return isAuthenticated() && request.auth.token.role == 'attendee';
+    }
+
+    function isOwner(organizerId) {
+      return isOrganizer() && request.auth.uid == organizerId;
+    }
+
+    // ─── Events Collection ──────────────────────────────────────────────
+    match /events/{eventId} {
+      // Anyone authenticated can read event details (name, date, capacity)
+      allow read: if isAuthenticated();
+
+      // Only organizers can create events
+      allow create: if isOrganizer()
+                    && request.resource.data.organizerId == request.auth.uid;
+
+      // Only the owning organizer can update their event
+      allow update: if isOwner(resource.data.organizerId);
+
+      // Only the owning organizer can delete their event
+      allow delete: if isOwner(resource.data.organizerId);
+
+      // ─── Checkins Subcollection (keyed by registrationId) ───────────
+      match /checkins/{registrationId} {
+        // Organizers and staff can read check-in records
+        allow read: if isOrganizer();
+
+        // Checkins are created via server-side admin SDK transactions only
+        // This rule blocks direct client writes as an extra safety layer
+        allow write: if false;
+      }
+    }
+
+    // ─── Registrations Collection ───────────────────────────────────────
+    match /registrations/{regId} {
+      // Attendees can read their own registration
+      // Organizers can read all registrations for their events
+      allow read: if isAuthenticated()
+                  && (request.auth.uid == resource.data.attendeeId || isOrganizer());
+
+      // Registrations are created via server-side admin SDK transactions only
+      // This rule blocks direct client writes to enforce atomic capacity checks
+      allow write: if false;
+    }
+
+    // ─── Checkin Sync Log Collection ────────────────────────────────────
+    match /checkin_sync_log/{logId} {
+      // Only organizers can read sync logs
+      allow read: if isOrganizer();
+
+      // Sync logs are written via server-side admin SDK only
+      allow write: if false;
+    }
+
+    // ─── Catch-All Deny ─────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
