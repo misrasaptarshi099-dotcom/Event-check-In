@@ -3,6 +3,8 @@
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider, getFreshAuthToken } from '@/lib/firebase/client';
 import { Button, Input, StatusChip, ProgressBar } from '@/components/ui';
 import type { EventItem } from '@/types';
 
@@ -17,12 +19,15 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
   const [event, setEvent] = useState<EventItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>('');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [guestCount, setGuestCount] = useState(1);
 
+  // 1. Fetch Event metadata
   useEffect(() => {
     fetch(`/api/events/${eventId}`)
       .then((res) => res.json())
@@ -37,20 +42,76 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
       .finally(() => setLoading(false));
   }, [eventId]);
 
+  // 2. Track authenticated user
+  useEffect(() => {
+    const cachedEmail = localStorage.getItem('vouch_user_email');
+    const cachedName = localStorage.getItem('vouch_user_name');
+    if (cachedEmail) {
+      setUserEmail(cachedEmail);
+      setName(cachedName || '');
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && user.email) {
+        setUserEmail(user.email);
+        setUserName(user.displayName || '');
+        setName((prev) => prev || user.displayName || '');
+        localStorage.setItem('vouch_user_email', user.email);
+        localStorage.setItem('vouch_user_name', user.displayName || '');
+        localStorage.setItem('vouch_user_uid', user.uid);
+      } else {
+        setUserEmail(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setAuthLoading(true);
+    setError(null);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      const idToken = await user.getIdToken();
+      const email = user.email || '';
+
+      localStorage.setItem('vouch_user_uid', user.uid);
+      localStorage.setItem('vouch_user_email', email);
+      localStorage.setItem('vouch_user_name', user.displayName || '');
+      localStorage.setItem('vouch_auth_token', idToken);
+
+      setUserEmail(email);
+      setName(user.displayName || '');
+    } catch (err: any) {
+      setError(err.message || 'Google authentication failed.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!event) return;
+    if (!event || !userEmail) return;
 
     setSubmitting(true);
     setError(null);
 
     try {
+      const token = await getFreshAuthToken();
+      if (!token) {
+        throw new Error('Please sign in with Google to complete registration.');
+      }
+
       const res = await fetch(`/api/events/${eventId}/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          attendeeName: name.trim(),
-          attendeeEmail: email.trim().toLowerCase(),
+          attendeeName: name.trim() || userName || 'Guest Attendee',
+          attendeeEmail: userEmail.trim().toLowerCase(),
           guestCount,
         }),
       });
@@ -61,9 +122,7 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
         throw new Error(data.error || 'Registration failed.');
       }
 
-      // Store registration data in localStorage for quick ticket access
       localStorage.setItem(`vouch_ticket_${data.registration.id}`, JSON.stringify(data.registration));
-
       router.push(`/ticket/${data.registration.id}?eventId=${eventId}`);
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
@@ -96,6 +155,10 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
   }
 
   const isSoldOut = event ? event.spotsRemaining <= 0 : false;
+  const isStarted = event ? new Date(event.eventDate).getTime() <= Date.now() : false;
+  const isEnded = event?.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : isStarted;
+  const isRegistrationClosed = isStarted || isEnded;
+
   const registeredCount = event ? event.capacity - event.spotsRemaining : 0;
   const fillPct = event ? Math.round((registeredCount / event.capacity) * 100) : 0;
 
@@ -113,8 +176,14 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
           </span>
         </Link>
         <StatusChip
-          status={isSoldOut ? 'SOLD OUT' : 'SEATS AVAILABLE'}
-          variant={isSoldOut ? 'danger' : 'success'}
+          status={
+            isRegistrationClosed
+              ? 'REGISTRATION CLOSED'
+              : isSoldOut
+              ? 'SOLD OUT'
+              : 'SEATS AVAILABLE'
+          }
+          variant={isRegistrationClosed || isSoldOut ? 'danger' : 'success'}
         />
       </header>
 
@@ -171,7 +240,7 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
                 value={fillPct}
                 label="Available Capacity"
                 sublabel={`${event?.spotsRemaining} seats left of ${event?.capacity}`}
-                variant={isSoldOut ? 'accent' : 'primary'}
+                variant={isRegistrationClosed || isSoldOut ? 'accent' : 'primary'}
                 height="sm"
               />
             </div>
@@ -182,8 +251,24 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
               </div>
             )}
 
-            {/* Registration Form */}
-            {isSoldOut ? (
+            {/* CASE 1: Event Started or Ended — Closed */}
+            {isRegistrationClosed ? (
+              <div className="border-2 border-accent bg-accent/5 p-6 text-center space-y-3">
+                <StatusChip status="REGISTRATION CLOSED" variant="danger" />
+                <h3 className="text-xl font-serif italic font-bold text-accent">
+                  {isEnded ? 'Event Concluded' : 'Event Has Already Started'}
+                </h3>
+                <p className="text-xs text-muted-text max-w-md mx-auto">
+                  Registrations close automatically once an event begins. No new passes can be issued for this session.
+                </p>
+                <Link href="/" className="inline-block pt-2">
+                  <Button variant="secondary" size="sm">
+                    ← Return to Upcoming Events
+                  </Button>
+                </Link>
+              </div>
+            ) : isSoldOut ? (
+              /* CASE 2: Sold out */
               <div className="border border-accent bg-accent/5 p-6 text-center space-y-2">
                 <h3 className="text-lg font-serif italic font-bold text-accent">
                   Capacity Reached
@@ -192,23 +277,68 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
                   This event is fully booked. Concurrency rules prevent overselling.
                 </p>
               </div>
+            ) : !userEmail ? (
+              /* CASE 3: Not logged in — Enforce Auth Gate */
+              <div className="border-2 border-border-rigid p-6 bg-surface-low text-center space-y-4">
+                <div className="space-y-1">
+                  <span className="text-2xl">🔒</span>
+                  <h3 className="text-base font-serif italic font-bold text-primary">
+                    Authentication Required
+                  </h3>
+                  <p className="text-xs text-muted-text">
+                    You must sign in with Google to register for this event. Your verified email will be permanently bound to your dynamic gate QR pass.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={authLoading}
+                  className="w-full h-12 border-2 border-border-rigid bg-surface hover:bg-surface-high transition-colors flex items-center justify-center gap-3 font-mono text-xs uppercase font-bold tracking-wider text-primary shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    />
+                  </svg>
+                  <span>{authLoading ? 'Signing in...' : 'Continue with Google to Register'}</span>
+                </button>
+              </div>
             ) : (
+              /* CASE 4: Logged in & Open — Registration Form */
               <form onSubmit={handleRegister} className="space-y-4">
+                {/* Authenticated Identity Locked Display */}
+                <div className="border border-border-rigid p-3.5 bg-surface-high space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-muted-text tracking-wider">
+                      Verified Identity (Locked)
+                    </span>
+                    <span className="text-[10px] text-[#15803D] font-bold">✓ Signed In</span>
+                  </div>
+                  <p className="text-xs font-mono font-semibold text-primary">{userEmail}</p>
+                  <p className="text-[10px] text-muted-text">
+                    Pass will be bound strictly to this Google account.
+                  </p>
+                </div>
+
                 <Input
                   label="Your Full Name"
                   placeholder="e.g. Alex Vance"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  required
-                />
-
-                <Input
-                  label="Your Email Address"
-                  type="email"
-                  placeholder="alex@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  hint="Your digital pass and TOTP key will be assigned to this email"
                   required
                 />
 

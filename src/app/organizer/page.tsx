@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, getFreshAuthToken } from '@/lib/firebase/client';
 import { Button, Input, StatusChip, ProgressBar } from '@/components/ui';
 import { EditEventModal } from '@/components/dashboard/EditEventModal';
 import type { EventItem } from '@/types';
@@ -34,7 +36,7 @@ export default function OrganizerDashboard() {
   const [teamSuccess, setTeamSuccess] = useState<string | null>(null);
 
   const fetchOrganizers = async () => {
-    const token = localStorage.getItem('vouch_auth_token');
+    const token = await getFreshAuthToken();
     if (!token) return;
 
     try {
@@ -51,7 +53,7 @@ export default function OrganizerDashboard() {
   };
 
   const fetchEvents = async () => {
-    const token = localStorage.getItem('vouch_auth_token');
+    const token = await getFreshAuthToken();
     if (!token) return;
 
     try {
@@ -73,7 +75,7 @@ export default function OrganizerDashboard() {
     if (!deletingEvent) return;
     setDeleteLoading(true);
 
-    const token = localStorage.getItem('vouch_auth_token');
+    const token = await getFreshAuthToken();
     if (!token) return;
 
     try {
@@ -99,17 +101,27 @@ export default function OrganizerDashboard() {
 
   useEffect(() => {
     const role = localStorage.getItem('vouch_user_role');
-    const token = localStorage.getItem('vouch_auth_token');
     const email = localStorage.getItem('vouch_user_email');
     setUserEmail(email);
 
-    if (!token || role !== 'organizer') {
+    if (role !== 'organizer' && !email) {
       window.location.href = '/auth/login';
       return;
     }
 
     fetchEvents();
     fetchOrganizers();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user && user.email) {
+        setUserEmail(user.email);
+        localStorage.setItem('vouch_user_email', user.email);
+        const token = await user.getIdToken();
+        localStorage.setItem('vouch_auth_token', token);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleAddOrganizer = async (e: React.FormEvent) => {

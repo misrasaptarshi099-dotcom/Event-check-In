@@ -356,6 +356,9 @@ export default function HomePage() {
               <div className="border border-border-rigid divide-y divide-border-rigid">
                 {events.map((event) => {
                   const userReg = myRegistrations.find((r) => r.eventId === event.id);
+                  const isStarted = new Date(event.eventDate).getTime() <= Date.now();
+                  const isEnded = event.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : isStarted;
+                  const isClosed = isStarted || isEnded;
 
                   return (
                     <div
@@ -363,7 +366,7 @@ export default function HomePage() {
                       className="grid-ledger-row p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface"
                     >
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-serif italic text-lg font-medium text-primary">
                             {event.name}
                           </span>
@@ -376,6 +379,12 @@ export default function HomePage() {
                           )}
                           {userReg && (
                             <StatusChip status="REGISTERED" variant="success" />
+                          )}
+                          {isClosed && (
+                            <StatusChip
+                              status={isEnded ? 'CONCLUDED' : 'LIVE NOW · REGISTRATION CLOSED'}
+                              variant="danger"
+                            />
                           )}
                         </div>
                         <p className="text-[11px] text-muted-text muted-label">
@@ -399,6 +408,10 @@ export default function HomePage() {
                               🎟️ View QR Pass
                             </Button>
                           </Link>
+                        ) : isClosed ? (
+                          <Button variant="outline" size="sm" disabled className="opacity-50 cursor-not-allowed text-[10px]">
+                            Registration Closed
+                          </Button>
                         ) : (
                           <Link href={`/register/${event.id}`}>
                             <Button variant="accent" size="sm">

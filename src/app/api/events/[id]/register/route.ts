@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { registerForEvent } from '@/lib/services/registrations.service';
+import { verifyAuthToken } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, REGISTRATION_LIMIT } from '@/lib/security/rateLimit';
 
 interface RouteParams {
@@ -14,8 +15,25 @@ export async function POST(request: Request, { params }: RouteParams) {
     const rateLimitRes = checkRateLimit(getRateLimitKey(request), REGISTRATION_LIMIT);
     if (rateLimitRes) return rateLimitRes;
 
+    // 1. Enforce Authentication: User MUST be signed in with Google
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required. Please sign in to register for events.' },
+        { status: 401 }
+      );
+    }
+
+    const authUser = await verifyAuthToken(authHeader);
+    if (!authUser || !authUser.email) {
+      return NextResponse.json(
+        { error: 'Valid authentication session required.' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
-    const { attendeeId, attendeeName, attendeeEmail, guestCount: rawGuestCount } = body;
+    const { attendeeName, attendeeEmail, guestCount: rawGuestCount } = body;
 
     if (!attendeeName || typeof attendeeName !== 'string' || attendeeName.trim().length === 0) {
       return NextResponse.json({ error: 'Attendee name is required.' }, { status: 400 });
@@ -25,22 +43,33 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Valid attendee email is required.' }, { status: 400 });
     }
 
-    // Validate guest count: 1–5 (includes the registrant)
+    // 2. Strict Identity Enforcement: Cannot register with a different email than authenticated account
+    const normalizedAuthEmail = authUser.email.trim().toLowerCase();
+    const normalizedInputEmail = attendeeEmail.trim().toLowerCase();
+
+    if (normalizedAuthEmail !== normalizedInputEmail) {
+      return NextResponse.json(
+        {
+          error: `Identity mismatch: You are signed in as ${normalizedAuthEmail}. You cannot register using a different email address (${normalizedInputEmail}).`,
+        },
+        { status: 403 }
+      );
+    }
+
+    // 3. Validate guest count: 1–5 (includes the registrant)
     const guestCount = Math.floor(Number(rawGuestCount) || 1);
     if (guestCount < 1 || guestCount > 5) {
       return NextResponse.json({ error: 'Guest count must be between 1 and 5.' }, { status: 400 });
     }
 
-    // Generate or use attendee ID
-    const resolvedAttendeeId = attendeeId && typeof attendeeId === 'string'
-      ? attendeeId.trim()
-      : `att_${attendeeEmail.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    // Generate authoritative attendee ID tied to user UID
+    const resolvedAttendeeId = authUser.uid;
 
     const registration = await registerForEvent(
       eventId,
       resolvedAttendeeId,
       attendeeName.trim(),
-      attendeeEmail.trim().toLowerCase(),
+      normalizedAuthEmail,
       guestCount
     );
 

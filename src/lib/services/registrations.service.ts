@@ -47,13 +47,23 @@ export async function registerForEvent(
 
     const event = eventSnap.data() as EventItem;
 
-    // 2. Check for duplicate registration
+    // 2. Validate event lifecycle: Registration closes once event starts
+    const nowMs = Date.now();
+    const eventStartMs = new Date(event.eventDate).getTime();
+    if (nowMs >= eventStartMs) {
+      throw new RegistrationError(400, 'Registration is closed. This event has already started.');
+    }
+    if (event.eventEndDate && nowMs >= new Date(event.eventEndDate).getTime()) {
+      throw new RegistrationError(400, 'Registration is closed. This event has already ended.');
+    }
+
+    // 3. Check for duplicate registration
     const existingReg = await transaction.get(regRef);
     if (existingReg.exists) {
       throw new RegistrationError(409, 'You are already registered for this event.');
     }
 
-    // 3. Validate capacity against guest count
+    // 4. Validate capacity against guest count
     if (event.spotsRemaining <= 0) {
       throw new RegistrationError(409, 'Event is full. No spots remaining.');
     }

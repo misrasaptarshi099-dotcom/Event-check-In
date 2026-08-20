@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
+import { getFreshAuthToken } from '@/lib/firebase/client';
 import { Button, StatusChip, Tabs, Table, type Column } from '@/components/ui';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { CheckinHistogram } from '@/components/dashboard/CheckinHistogram';
@@ -35,10 +36,9 @@ export default function EventDashboardPage({ params }: PageParams) {
 
   const fetchData = React.useCallback(async () => {
     try {
-      const role = localStorage.getItem('vouch_user_role');
-      const token = localStorage.getItem('vouch_auth_token');
+      const token = await getFreshAuthToken();
 
-      if (!token || role !== 'organizer') {
+      if (!token) {
         window.location.href = '/auth/login';
         return;
       }
