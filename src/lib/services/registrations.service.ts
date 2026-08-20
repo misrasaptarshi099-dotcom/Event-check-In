@@ -22,7 +22,7 @@ export class RegistrationError extends Error {
  * 1. Read the event document.
  * 2. Validate spots_remaining > 0.
  * 3. Atomically decrement spots_remaining by 1.
- * 4. Write the new registration with a generated TOTP secret.
+ * 4. Write the new registration with a generated TOTP secret and event ticket price.
  *
  * If capacity is exhausted, aborts with 409 "Event is Full".
  * If the attendee is already registered, aborts with 409 "Already Registered".
@@ -62,7 +62,7 @@ export async function registerForEvent(
       spotsRemaining: event.spotsRemaining - 1,
     });
 
-    // 5. Generate TOTP secret and create registration
+    // 5. Generate TOTP secret and create registration record
     const totpSecret = generateTotpSecret();
     const now = new Date().toISOString();
 
@@ -75,6 +75,7 @@ export async function registerForEvent(
       qrToken: regId,
       totpSecret,
       status: 'active',
+      ticketPrice: event.ticketPrice ?? 0,
       createdAt: now,
     };
 

@@ -21,6 +21,10 @@ export interface EventItem {
   description?: string;
   eventDate: string; // ISO date string
   timezone?: string; // IANA timezone (e.g. 'America/New_York'), defaults to 'UTC'
+  venue?: string; // Location or venue name
+  bannerUrl?: string; // Banner image URL or base64 data string
+  ticketPrice?: number; // Price per ticket in currency units (e.g. 0 for free, 50, 150)
+  currency?: string; // Currency code, defaults to 'USD'
   capacity: number;
   spotsRemaining: number;
   createdAt: string;
@@ -35,6 +39,7 @@ export interface Registration {
   qrToken: string;
   totpSecret: string; // Base32 RFC 6238 secret (delivered once to attendee)
   status: RegistrationStatus;
+  ticketPrice?: number;
   createdAt: string;
 }
 
@@ -83,6 +88,34 @@ export interface StatsBundle {
   checkinsBy15Min: CheckinTimeBucket[];
   peakCheckinBucket: string;
   peakCheckinCount: number;
+  computedAt: string;
+}
+
+export interface TransactionEntry {
+  id: string;
+  registrationId: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  amount: number;
+  currency: string;
+  status: 'completed' | 'refunded';
+  createdAt: string;
+}
+
+export interface FinanceBundle {
+  eventId: string;
+  eventName: string;
+  ticketPrice: number;
+  currency: string;
+  grossRevenue: number;
+  netRevenue: number;
+  refundedAmount: number;
+  paidTicketsCount: number;
+  unpaidTicketsCount: number;
+  averageOrderValue: number;
+  projectedRevenue: number; // Potential gross revenue at 100% capacity
+  occupancyFinancialRate: number; // Percentage of projected revenue realized (0-100)
+  recentTransactions: TransactionEntry[];
   computedAt: string;
 }
 

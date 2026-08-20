@@ -5,7 +5,7 @@ const EVENTS_COLLECTION = 'events';
 
 /**
  * Creates a new event document in Firestore.
- * Omits description when not provided to avoid storing undefined in Firebase.
+ * Omits undefined fields to prevent writing undefined to Firebase.
  */
 export async function createEvent(
   data: Omit<EventItem, 'id' | 'createdAt' | 'spotsRemaining'>
@@ -23,10 +23,12 @@ export async function createEvent(
     createdAt: now,
   };
 
-  // Only include description if provided (don't write undefined to Firebase)
-  if (data.description !== undefined) {
-    event.description = data.description;
-  }
+  if (data.description !== undefined) event.description = data.description;
+  if (data.timezone !== undefined) event.timezone = data.timezone;
+  if (data.venue !== undefined) event.venue = data.venue;
+  if (data.bannerUrl !== undefined) event.bannerUrl = data.bannerUrl;
+  if (data.ticketPrice !== undefined) event.ticketPrice = Number(data.ticketPrice);
+  if (data.currency !== undefined) event.currency = data.currency;
 
   await docRef.set(event);
   return event;
@@ -55,6 +57,19 @@ export async function getEventsByOrganizer(organizerId: string): Promise<EventIt
 }
 
 /**
+ * Retrieves all active upcoming public events for attendee discovery.
+ */
+export async function getAllPublicEvents(): Promise<EventItem[]> {
+  const snapshot = await adminDb
+    .collection(EVENTS_COLLECTION)
+    .orderBy('createdAt', 'desc')
+    .limit(50)
+    .get();
+
+  return snapshot.docs.map((doc) => doc.data() as EventItem);
+}
+
+/**
  * Updates mutable fields on an event document.
  *
  * Capacity changes are handled transactionally:
@@ -63,9 +78,17 @@ export async function getEventsByOrganizer(organizerId: string): Promise<EventIt
  */
 export async function updateEvent(
   eventId: string,
-  updates: Partial<Pick<EventItem, 'name' | 'description' | 'eventDate' | 'capacity'>>
+  updates: Partial<Pick<EventItem, 'name' | 'description' | 'eventDate' | 'capacity' | 'timezone' | 'venue' | 'bannerUrl' | 'ticketPrice' | 'currency'>>
 ): Promise<void> {
   const eventRef = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
+
+  // Clean updates object of undefined values
+  const cleanUpdates: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) {
+      cleanUpdates[key] = value;
+    }
+  }
 
   if (updates.capacity !== undefined) {
     // Transactional capacity update to maintain spotsRemaining consistency
@@ -76,17 +99,17 @@ export async function updateEvent(
       }
 
       const current = eventSnap.data() as EventItem;
-      const capacityDelta = updates.capacity! - current.capacity;
+      const capacityDelta = Number(updates.capacity) - current.capacity;
       const newSpotsRemaining = Math.max(0, current.spotsRemaining + capacityDelta);
 
       transaction.update(eventRef, {
-        ...updates,
+        ...cleanUpdates,
         spotsRemaining: newSpotsRemaining,
       });
     });
   } else {
-    // No capacity change — simple update
-    await eventRef.update(updates);
+    // No capacity change — standard update
+    await eventRef.update(cleanUpdates);
   }
 }
 
