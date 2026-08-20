@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { computeEventStats } from './stats.service';
 import { computeEventFinance } from './finance.service';
+import { formatCurrency } from '@/lib/utils/format';
 import type { StatsBundle, FinanceBundle } from '@/types';
 
 const GEMINI_TIMEOUT_MS = 8_000;
@@ -117,11 +118,11 @@ function generateFallbackAnswer(
 
   // Financial queries
   if (q.includes('revenue') || q.includes('gross') || q.includes('money') || q.includes('sales') || q.includes('earned')) {
-    return `Gross revenue is $${finance.grossRevenue.toLocaleString()} (${finance.paidTicketsCount} tickets sold at $${finance.ticketPrice} each). Projected 100% capacity revenue is $${finance.projectedRevenue.toLocaleString()}.`;
+    return `Gross revenue is ${formatCurrency(finance.grossRevenue, finance.currency)} (${finance.paidTicketsCount} tickets sold at ${formatCurrency(finance.ticketPrice, finance.currency)} each). Projected 100% capacity revenue is ${formatCurrency(finance.projectedRevenue, finance.currency)}.`;
   }
 
   if (q.includes('price') || q.includes('ticket price') || q.includes('cost')) {
-    return `Ticket price is $${finance.ticketPrice} ${finance.currency}. Average order value is $${finance.averageOrderValue}.`;
+    return `Ticket price is ${formatCurrency(finance.ticketPrice, finance.currency)}. Average order value is ${formatCurrency(finance.averageOrderValue, finance.currency)}.`;
   }
 
   // Attendance queries
@@ -135,7 +136,7 @@ function generateFallbackAnswer(
 
   if (q.includes('no-show') || q.includes('no show') || q.includes('absent')) {
     const lostRev = stats.noShowCount * finance.ticketPrice;
-    return `${stats.noShowCount} attendees have not checked in (${stats.noShowPct}% no-show rate), representing $${lostRev.toLocaleString()} in no-show ticket value.`;
+    return `${stats.noShowCount} attendees have not checked in (${stats.noShowPct}% no-show rate), representing ${formatCurrency(lostRev, finance.currency)} in no-show ticket value.`;
   }
 
   if (q.includes('peak') || q.includes('busiest') || q.includes('rush')) {
@@ -143,5 +144,5 @@ function generateFallbackAnswer(
   }
 
   // General summary
-  return `Event "${stats.eventName}": ${stats.checkedInCount}/${stats.registeredCount} checked in, $${finance.grossRevenue.toLocaleString()} revenue earned, ${stats.spotsRemaining} spots remaining. Peak: ${stats.peakCheckinBucket} (${stats.peakCheckinCount} check-ins). [AI fallback mode]`;
+  return `Event "${stats.eventName}": ${stats.checkedInCount}/${stats.registeredCount} checked in, ${formatCurrency(finance.grossRevenue, finance.currency)} revenue earned, ${stats.spotsRemaining} spots remaining. Peak: ${stats.peakCheckinBucket} (${stats.peakCheckinCount} check-ins). [AI fallback mode]`;
 }

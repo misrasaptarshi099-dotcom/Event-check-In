@@ -14,11 +14,14 @@ export interface OrganizerRecord {
   isPrimary?: boolean;
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs = 2500, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
-  ]);
+function withTimeout<T, F = T>(promise: Promise<T>, timeoutMs = 2500, fallback: F): Promise<T | F> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<F>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 /**
@@ -143,13 +146,18 @@ export async function addOrganizer(email: string, addedBy: string): Promise<Orga
 }
 
 /**
- * Removes an organizer. Seed organizers cannot be removed.
+ * Removes an organizer. Seed and environment-configured organizers cannot be removed.
  */
 export async function removeOrganizer(email: string): Promise<void> {
   const normalized = email.trim().toLowerCase();
 
-  if (SEED_ORGANIZER_EMAILS.includes(normalized)) {
-    throw new Error('Cannot remove primary system organizer.');
+  const envList = (process.env.ORGANIZER_EMAILS || process.env.NEXT_PUBLIC_ORGANIZER_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (SEED_ORGANIZER_EMAILS.includes(normalized) || envList.includes(normalized)) {
+    throw new Error('Cannot remove primary or environment-configured system organizer.');
   }
 
   // 1. Delete from Firestore

@@ -16,9 +16,16 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
  *   FIREBASE_CLIENT_EMAIL
  *   FIREBASE_PRIVATE_KEY  (PEM, newlines escaped as \n)
  */
-function getAdminApp(): App {
+let cachedApp: App | null = null;
+let cachedAuth: Auth | null = null;
+let cachedDb: Firestore | null = null;
+
+export function getAdminApp(): App {
+  if (cachedApp) return cachedApp;
+
   if (getApps().length > 0) {
-    return getApps()[0];
+    cachedApp = getApps()[0];
+    return cachedApp;
   }
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -38,29 +45,51 @@ function getAdminApp(): App {
     privateKey: privateKeyRaw.replace(/\\n/g, '\n'),
   };
 
-  return initializeApp({
+  cachedApp = initializeApp({
     credential: cert(serviceAccount),
     projectId,
   });
+
+  return cachedApp;
 }
 
-const adminApp = getAdminApp();
+export function getAdminAuth(): Auth {
+  if (!cachedAuth) {
+    cachedAuth = getAuth(getAdminApp());
+  }
+  return cachedAuth;
+}
+
+export function getAdminDb(): Firestore {
+  if (!cachedDb) {
+    const app = getAdminApp();
+    const firestoreDbId = process.env.FIRESTORE_DATABASE_ID || process.env.NEXT_PUBLIC_FIRESTORE_DATABASE_ID;
+    cachedDb =
+      firestoreDbId && firestoreDbId !== '(default)'
+        ? getFirestore(app, firestoreDbId)
+        : getFirestore(app);
+  }
+  return cachedDb;
+}
 
 /**
- * Firebase Admin Auth instance (server-side)
- * Used for verifying ID tokens, setting custom claims (RBAC), and managing users.
+ * Lazy Proxy instances so module evaluation does not throw configuration errors
+ * until an actual property or method is accessed.
  */
-export const adminAuth: Auth = getAuth(adminApp);
+export const adminAuth: Auth = new Proxy({} as Auth, {
+  get(_target, prop) {
+    const instance = getAdminAuth();
+    const val = (instance as any)[prop];
+    return typeof val === 'function' ? val.bind(instance) : val;
+  },
+});
 
-const firestoreDbId = process.env.FIRESTORE_DATABASE_ID || process.env.NEXT_PUBLIC_FIRESTORE_DATABASE_ID;
+export const adminDb: Firestore = new Proxy({} as Firestore, {
+  get(_target, prop) {
+    const instance = getAdminDb();
+    const val = (instance as any)[prop];
+    return typeof val === 'function' ? val.bind(instance) : val;
+  },
+});
 
-/**
- * Firebase Admin Firestore instance (server-side)
- * Used for atomic transactions (runTransaction) in API route handlers.
- */
-export const adminDb: Firestore =
-  firestoreDbId && firestoreDbId !== '(default)'
-    ? getFirestore(adminApp, firestoreDbId)
-    : getFirestore(adminApp);
-
-export default adminApp;
+export default adminAuth;

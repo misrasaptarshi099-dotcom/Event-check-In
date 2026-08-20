@@ -75,7 +75,7 @@ export function SyncConflictDrawer({ logs, className }: SyncConflictDrawerProps)
         <Table
           columns={columns}
           data={logs}
-          keyExtractor={(log) => log.clientScanId}
+          keyExtractor={(log) => log.id}
           emptyMessage="No scanner sync operations recorded yet. Multi-station check-ins will populate here."
         />
       </div>

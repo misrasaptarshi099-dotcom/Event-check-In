@@ -52,10 +52,13 @@ export function CheckinHistogram({
               return (
                 <div
                   key={b.bucket}
-                  className="flex-1 min-w-[32px] flex flex-col items-center justify-end h-full group relative"
+                  tabIndex={0}
+                  role="img"
+                  aria-label={`${b.bucket}: ${b.count} check-ins${isPeak ? ' (peak volume)' : ''}`}
+                  className="flex-1 min-w-[32px] flex flex-col items-center justify-end h-full group relative focus:outline-none focus:ring-1 focus:ring-accent"
                 >
                   {/* Tooltip */}
-                  <div className="absolute -top-8 bg-primary text-surface text-[10px] px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                  <div className="absolute -top-8 bg-primary text-surface text-[10px] px-1.5 py-0.5 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
                     {b.bucket}: {b.count} check-ins
                   </div>
 

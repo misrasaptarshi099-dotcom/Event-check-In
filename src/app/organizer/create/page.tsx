@@ -4,9 +4,11 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Input, ImageUpload, StatusChip } from '@/components/ui';
+import { formatCurrency } from '@/lib/utils/format';
 
 export default function CreateEventPage() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,7 +18,9 @@ export default function CreateEventPage() {
 
     if (!token || role !== 'organizer') {
       window.location.href = '/auth/login';
+      return;
     }
+    setChecking(false);
   }, []);
 
   // Form State
@@ -30,6 +34,10 @@ export default function CreateEventPage() {
   const [ticketPrice, setTicketPrice] = useState('0');
   const [currency, setCurrency] = useState('USD');
   const [bannerUrl, setBannerUrl] = useState('');
+
+  if (checking) {
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -294,7 +302,7 @@ export default function CreateEventPage() {
               ) : (
                 <div className="h-12 bg-primary flex items-center justify-between px-4 text-surface text-xs uppercase font-bold tracking-widest">
                   <span>VOUCH // PASS</span>
-                  <span>{ticketPrice !== '0' ? `$${ticketPrice} ${currency}` : 'FREE'}</span>
+                  <span>{ticketPrice !== '0' && Number(ticketPrice) > 0 ? formatCurrency(Number(ticketPrice), currency) : 'FREE'}</span>
                 </div>
               )}
 
@@ -318,7 +326,7 @@ export default function CreateEventPage() {
                 <div className="text-right">
                   <span className="text-[9px] uppercase text-muted-text block">TICKET PRICE</span>
                   <span className="font-bold text-accent">
-                    {ticketPrice !== '0' ? `$${ticketPrice} ${currency}` : 'FREE ADMISSION'}
+                    {ticketPrice !== '0' && Number(ticketPrice) > 0 ? formatCurrency(Number(ticketPrice), currency) : 'FREE ADMISSION'}
                   </span>
                 </div>
               </div>

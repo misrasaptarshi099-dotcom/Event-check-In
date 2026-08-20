@@ -85,6 +85,8 @@ export async function getRecoverableScans(): Promise<OfflineQueuedScan[]> {
   return [...syncing, ...failed];
 }
 
+const ROSTER_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 /**
  * Updates the sync status of a queued scan within a single readwrite transaction
  * to prevent concurrent writers from overwriting intervening changes.
@@ -100,7 +102,9 @@ export async function updateScanStatus(
   const scan = await store.get(clientScanId);
   if (scan) {
     scan.syncStatus = status;
-    if (syncResult) scan.syncResult = syncResult;
+    if (arguments.length >= 3) {
+      scan.syncResult = syncResult;
+    }
     await store.put(scan);
   }
   await tx.done;
@@ -150,14 +154,24 @@ export async function cacheEncryptedRoster(
 }
 
 /**
- * Retrieves the encrypted roster for an event.
+ * Retrieves the encrypted roster for an event, validating cache TTL.
  */
 export async function getEncryptedRoster(
   eventId: string
 ): Promise<ArrayBuffer | null> {
   const db = await getDB();
   const entry = await db.get('roster', eventId);
-  return entry?.encryptedData ?? null;
+  if (!entry) return null;
+
+  if (entry.cachedAt) {
+    const age = Date.now() - new Date(entry.cachedAt).getTime();
+    if (age > ROSTER_CACHE_TTL_MS) {
+      await db.delete('roster', eventId);
+      return null;
+    }
+  }
+
+  return entry.encryptedData ?? null;
 }
 
 /**

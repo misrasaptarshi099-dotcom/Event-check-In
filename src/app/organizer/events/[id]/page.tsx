@@ -34,7 +34,7 @@ export default function EventDashboardPage({ params }: PageParams) {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const fetchData = React.useCallback(async () => {
+  const fetchData = React.useCallback(async (signal?: AbortSignal) => {
     try {
       const token = await getFreshAuthToken();
 
@@ -47,8 +47,8 @@ export default function EventDashboardPage({ params }: PageParams) {
 
       // 1. Fetch Event details & Stats
       const [eventRes, statsRes] = await Promise.all([
-        fetch(`/api/events/${eventId}`, { headers: authHeader }),
-        fetch(`/api/events/${eventId}/stats`, { headers: authHeader }),
+        fetch(`/api/events/${eventId}`, { headers: authHeader, signal }),
+        fetch(`/api/events/${eventId}/stats`, { headers: authHeader, signal }),
       ]);
 
       if (!eventRes.ok) throw new Error('Event not found.');
@@ -59,19 +59,20 @@ export default function EventDashboardPage({ params }: PageParams) {
       setStats(statsData.stats);
 
       // 2. Fetch Finance
-      const finRes = await fetch(`/api/events/${eventId}/finance`, { headers: authHeader });
+      const finRes = await fetch(`/api/events/${eventId}/finance`, { headers: authHeader, signal });
       if (finRes.ok) {
         const finData = await finRes.json();
         setFinance(finData.finance);
       }
 
       // 3. Fetch Roster
-      const rosterRes = await fetch(`/api/events/${eventId}/roster`, { headers: authHeader });
+      const rosterRes = await fetch(`/api/events/${eventId}/roster`, { headers: authHeader, signal });
       if (rosterRes.ok) {
         const rosterData = await rosterRes.json();
         setRegistrations(rosterData.roster || []);
       }
     } catch (err: any) {
+      if (err.name === 'AbortError') return;
       setError(err.message || 'Failed to load event dashboard.');
     } finally {
       setLoading(false);
@@ -82,7 +83,7 @@ export default function EventDashboardPage({ params }: PageParams) {
     setDeleteLoading(true);
     setDeleteError(null);
 
-    const token = localStorage.getItem('vouch_auth_token');
+    const token = await getFreshAuthToken();
     if (!token) {
       setDeleteError('Authentication required.');
       setDeleteLoading(false);
@@ -108,11 +109,23 @@ export default function EventDashboardPage({ params }: PageParams) {
   };
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+
+    if (showEditModal) {
+      return () => controller.abort();
+    }
+
     // Auto-refresh stats every 10 seconds during active event
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    const interval = setInterval(() => {
+      fetchData(controller.signal);
+    }, 10000);
+
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [fetchData, showEditModal]);
 
   const tabs = [
     { id: 'operations', label: '📊 Operations & Live Gate', badge: stats ? `${stats.checkedInCount}/${stats.registeredCount}` : undefined },

@@ -65,6 +65,8 @@ export function checkRateLimit(
   if (!entry) {
     entry = { timestamps: [], windowMs };
     store.set(bucketKey, entry);
+  } else {
+    entry.windowMs = windowMs;
   }
 
   // Slide window: remove timestamps older than the window

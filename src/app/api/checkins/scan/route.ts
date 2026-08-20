@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server';
 import { performCheckin, CheckinError } from '@/lib/services/checkins.service';
 import { getRegistrationById } from '@/lib/services/registrations.service';
-import { parseAndVerifyQrPayload } from '@/lib/security/totp';
+import { parseAndVerifyQrPayload, verifyTotpToken } from '@/lib/security/totp';
+import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, CHECKIN_SCAN_LIMIT } from '@/lib/security/rateLimit';
 import type { ScanOutcome } from '@/types';
 
 export async function POST(request: Request) {
   try {
-    // Station-based rate limiting (max 60 scans/min per station)
-    const rateLimitRes = checkRateLimit(getRateLimitKey(request), CHECKIN_SCAN_LIMIT);
+    // 1. Authenticate scanner operator
+    const authHeader = request.headers.get('Authorization');
+    const authUser = await verifyAuthToken(authHeader);
+    requireRole(authUser, 'organizer');
+
+    // Station/User-based rate limiting (max 60 scans/min per operator)
+    const rateLimitRes = checkRateLimit(getRateLimitKey(request, authUser.uid), CHECKIN_SCAN_LIMIT);
     if (rateLimitRes) return rateLimitRes;
 
     const body = await request.json();
@@ -61,7 +67,7 @@ export async function POST(request: Request) {
       return NextResponse.json(outcome, { status: 400 });
     }
 
-    // If rawQrPayload provided, verify TOTP token strictly
+    // Credential Verification: Must provide either valid rawQrPayload or valid manual OTP
     if (rawQrPayload) {
       const verification = parseAndVerifyQrPayload(
         rawQrPayload,
@@ -77,6 +83,22 @@ export async function POST(request: Request) {
         };
         return NextResponse.json(outcome, { status: 400 });
       }
+    } else if (otp) {
+      const isOtpValid = verifyTotpToken(otp.trim(), registration.totpSecret);
+      if (!isOtpValid) {
+        const outcome: ScanOutcome = {
+          status: 'INVALID',
+          message: 'Invalid or expired manual check-in OTP code.',
+        };
+        return NextResponse.json(outcome, { status: 400 });
+      }
+    } else {
+      // Credential bypass attempt blocked
+      const outcome: ScanOutcome = {
+        status: 'INVALID',
+        message: 'Credential verification required. Missing QR token or OTP verification code.',
+      };
+      return NextResponse.json(outcome, { status: 400 });
     }
 
     // Perform atomic checkin in Firestore transaction
@@ -117,6 +139,10 @@ export async function POST(request: Request) {
       throw error;
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Check-in processing failed.' }, { status: 500 });
+    const status = error.statusCode || 500;
+    return NextResponse.json(
+      { error: error.message || 'Check-in processing failed.' },
+      { status }
+    );
   }
 }

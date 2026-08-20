@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase/admin';
+import { verifyAuthToken } from '@/lib/security/rbac';
 import type { Registration, EventItem } from '@/types';
 
 export interface EnrichedRegistration extends Registration {
@@ -8,17 +9,26 @@ export interface EnrichedRegistration extends Registration {
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const queryEmail = searchParams.get('email')?.trim().toLowerCase();
-
-    if (!queryEmail) {
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ registrations: [] });
     }
 
-    // 1. Fetch registrations for this attendee email
+    let userEmail: string;
+    try {
+      const authUser = await verifyAuthToken(authHeader);
+      if (!authUser || !authUser.email) {
+        return NextResponse.json({ registrations: [] });
+      }
+      userEmail = authUser.email.trim().toLowerCase();
+    } catch {
+      return NextResponse.json({ registrations: [] });
+    }
+
+    // 1. Fetch registrations for this authenticated attendee email only
     const regSnap = await adminDb
       .collection('registrations')
-      .where('attendeeEmail', '==', queryEmail)
+      .where('attendeeEmail', '==', userEmail)
       .get();
 
     const registrations = regSnap.docs
@@ -40,7 +50,9 @@ export async function GET(request: Request) {
           if (doc.exists) {
             eventMap.set(evId, doc.data() as EventItem);
           }
-        } catch {}
+        } catch (eventErr) {
+          console.error(`Failed to load event metadata for event ID [${evId}]:`, eventErr);
+        }
       })
     );
 
@@ -52,7 +64,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ registrations: enriched });
   } catch (error: any) {
     console.error('Failed to load attendee registrations:', error);
-    return NextResponse.json({ registrations: [], error: error.message }, { status: 500 });
+    return NextResponse.json({ registrations: [], error: 'Failed to load registrations.' }, { status: 500 });
   }
 }
 

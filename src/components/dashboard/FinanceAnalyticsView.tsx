@@ -7,6 +7,7 @@ import { Table, type Column } from '../ui/Table';
 import { Button } from '../ui/Button';
 import { StatusChip } from '../ui/StatusChip';
 import { ProgressBar } from '../ui/Progress';
+import { formatCurrency } from '@/lib/utils/format';
 import type { FinanceBundle, TransactionEntry } from '@/types';
 
 export interface FinanceAnalyticsViewProps {
@@ -52,7 +53,7 @@ export function FinanceAnalyticsView({ finance, eventId, className }: FinanceAna
       align: 'right',
       render: (tx) => (
         <span className="font-semibold text-primary">
-          ${tx.amount.toLocaleString()} {tx.currency}
+          {formatCurrency(tx.amount, tx.currency)}
         </span>
       ),
     },
@@ -89,18 +90,18 @@ export function FinanceAnalyticsView({ finance, eventId, className }: FinanceAna
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           label="Gross Revenue"
-          value={`$${finance.grossRevenue.toLocaleString()}`}
-          sublabel={`${finance.paidTicketsCount} tickets sold @ $${finance.ticketPrice}`}
+          value={formatCurrency(finance.grossRevenue, finance.currency)}
+          sublabel={`${finance.paidTicketsCount} tickets sold @ ${formatCurrency(finance.ticketPrice, finance.currency)}`}
           variant="accent"
         />
         <MetricCard
           label="Projected Ceiling (100%)"
-          value={`$${finance.projectedRevenue.toLocaleString()}`}
+          value={formatCurrency(finance.projectedRevenue, finance.currency)}
           sublabel="Total revenue potential at full capacity"
         />
         <MetricCard
           label="Avg Order Value"
-          value={`$${finance.averageOrderValue.toLocaleString()}`}
+          value={formatCurrency(finance.averageOrderValue, finance.currency)}
           sublabel={`Standard ticket unit price`}
         />
         <MetricCard
@@ -124,14 +125,14 @@ export function FinanceAnalyticsView({ finance, eventId, className }: FinanceAna
           </div>
           <div className="flex items-center gap-3 text-xs">
             <span className="text-muted-text uppercase">Unit Price:</span>
-            <span className="font-bold text-primary">${finance.ticketPrice} {finance.currency}</span>
+            <span className="font-bold text-primary">{formatCurrency(finance.ticketPrice, finance.currency)}</span>
           </div>
         </div>
 
         <ProgressBar
           value={finance.occupancyFinancialRate}
           label="Financial Capacity Realized"
-          sublabel={`$${finance.grossRevenue.toLocaleString()} / $${finance.projectedRevenue.toLocaleString()}`}
+          sublabel={`${formatCurrency(finance.grossRevenue, finance.currency)} / ${formatCurrency(finance.projectedRevenue, finance.currency)}`}
           variant={finance.occupancyFinancialRate >= 90 ? 'accent' : 'primary'}
           height="md"
         />

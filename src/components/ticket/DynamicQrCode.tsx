@@ -22,6 +22,7 @@ export function DynamicQrCode({
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [remainingSecs, setRemainingSecs] = useState<number>(30);
   const [lastGeneratedTime, setLastGeneratedTime] = useState<string>('');
+  const lastEpochRef = React.useRef<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -32,33 +33,39 @@ export function DynamicQrCode({
       const remaining = getRemainingSeconds();
       setRemainingSecs(remaining);
 
-      // Generate serialized QR payload
-      const payload = createQrPayload(registrationId, eventId, totpSecret);
+      const currentEpoch = Math.floor(Date.now() / 30_000);
 
-      try {
-        const url = await QRCode.toDataURL(payload, {
-          width: 280,
-          margin: 1,
-          color: {
-            dark: '#0F0F0F',
-            light: '#FBF9F4',
-          },
-          errorCorrectionLevel: 'M',
-        });
+      // Only re-encode the QR image when entering a new 30s TOTP epoch
+      if (lastEpochRef.current !== currentEpoch) {
+        // Generate serialized QR payload
+        const payload = createQrPayload(registrationId, eventId, totpSecret);
 
-        if (active) {
-          setQrDataUrl(url);
-          setLastGeneratedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        try {
+          const url = await QRCode.toDataURL(payload, {
+            width: 280,
+            margin: 1,
+            color: {
+              dark: '#0F0F0F',
+              light: '#FBF9F4',
+            },
+            errorCorrectionLevel: 'M',
+          });
+
+          if (active) {
+            setQrDataUrl(url);
+            setLastGeneratedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            lastEpochRef.current = currentEpoch;
+          }
+        } catch (err) {
+          console.error('QR generation error:', err);
         }
-      } catch (err) {
-        console.error('QR generation error:', err);
       }
     };
 
     // Initial generation
     updateCode();
 
-    // 1-second interval to keep countdown and 30s epoch perfectly synchronized
+    // 1-second interval to update countdown telemetry
     const interval = setInterval(() => {
       updateCode();
     }, 1000);

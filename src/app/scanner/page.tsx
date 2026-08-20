@@ -4,10 +4,18 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CameraViewport } from '@/components/scanner/CameraViewport';
 import { ScanResultOverlay } from '@/components/scanner/ScanResultOverlay';
-import { Button, StatusChip, Tabs } from '@/components/ui';
+import { Button, StatusChip, Modal } from '@/components/ui';
 import { enqueueScan, getPendingScans } from '@/lib/offline/db';
 import { drainOfflineQueue, registerAutoSync } from '@/lib/offline/syncManager';
+import { getFreshAuthToken } from '@/lib/firebase/client';
 import type { ScanOutcome, OfflineQueuedScan } from '@/types';
+
+interface SyncFeedback {
+  synced: number;
+  conflicts: number;
+  failed: number;
+  error?: string;
+}
 
 export default function ScannerPage() {
   const [isScanning, setIsScanning] = useState(true);
@@ -17,6 +25,11 @@ export default function ScannerPage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [scanHistory, setScanHistory] = useState<ScanOutcome[]>([]);
+  const [syncFeedback, setSyncFeedback] = useState<SyncFeedback | null>(null);
+
+  const refreshPending = React.useCallback(() => {
+    getPendingScans().then((scans) => setPendingCount(scans.length)).catch(() => {});
+  }, []);
 
   // Update online status & register sync listeners
   useEffect(() => {
@@ -26,27 +39,38 @@ export default function ScannerPage() {
     window.addEventListener('online', updateOnline);
     window.addEventListener('offline', updateOnline);
 
-    const unregisterAutoSync = registerAutoSync();
+    const unregisterAutoSync = registerAutoSync(() => {
+      refreshPending();
+    });
 
-    // Check pending count in IndexedDB
-    getPendingScans().then((scans) => setPendingCount(scans.length)).catch(() => {});
+    refreshPending();
 
     return () => {
       window.removeEventListener('online', updateOnline);
       window.removeEventListener('offline', updateOnline);
       unregisterAutoSync();
     };
-  }, []);
+  }, [refreshPending]);
 
   const handleDrainQueue = async () => {
     setSyncing(true);
+    setSyncFeedback(null);
     try {
       const results = await drainOfflineQueue();
       const remaining = await getPendingScans();
       setPendingCount(remaining.length);
-      alert(`Sync Complete: ${results.synced} synced, ${results.conflicts} conflicts logged, ${results.failed} failed.`);
+      setSyncFeedback({
+        synced: results.synced,
+        conflicts: results.conflicts,
+        failed: results.failed,
+      });
     } catch (err: any) {
-      alert(`Sync error: ${err.message}`);
+      setSyncFeedback({
+        synced: 0,
+        conflicts: 0,
+        failed: 0,
+        error: err.message || 'Sync failed.',
+      });
     } finally {
       setSyncing(false);
     }
@@ -63,9 +87,13 @@ export default function ScannerPage() {
 
       try {
         const parsed = JSON.parse(rawDecodedText);
-        regId = parsed.r;
-        eventId = parsed.e;
-        otp = parsed.t;
+        if (parsed && typeof parsed === 'object' && typeof parsed.r === 'string' && parsed.r.trim()) {
+          regId = parsed.r.trim();
+          eventId = typeof parsed.e === 'string' ? parsed.e.trim() : '';
+          otp = typeof parsed.t === 'string' ? parsed.t.trim() : '';
+        } else {
+          regId = rawDecodedText.trim();
+        }
       } catch {
         regId = rawDecodedText.trim();
       }
@@ -75,9 +103,15 @@ export default function ScannerPage() {
 
       // If online: submit directly to real-time endpoint
       if (isOnline) {
+        const token = await getFreshAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const res = await fetch('/api/checkins/scan', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             rawQrPayload: rawDecodedText,
             stationId,
@@ -167,10 +201,14 @@ export default function ScannerPage() {
         {/* Station & Mode Configuration Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-border-rigid p-4 bg-surface-low">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-widest text-muted-text font-semibold">
+            <label
+              htmlFor="station-gate-select"
+              className="text-[10px] uppercase tracking-widest text-muted-text font-semibold"
+            >
               Assigned Gate:
-            </span>
+            </label>
             <select
+              id="station-gate-select"
               value={stationId}
               onChange={(e) => setStationId(e.target.value)}
               className="bg-surface border border-border-rigid px-2 py-1 text-xs font-mono font-bold focus:outline-none rounded-none"
@@ -202,6 +240,42 @@ export default function ScannerPage() {
             </div>
           )}
         </div>
+
+        {/* Non-blocking Sync Feedback Modal */}
+        <Modal
+          isOpen={syncFeedback !== null}
+          onClose={() => setSyncFeedback(null)}
+          title="Queue Synchronization Report"
+        >
+          <div className="space-y-4 text-xs font-mono">
+            {syncFeedback?.error ? (
+              <div className="border border-accent bg-accent/10 p-3 text-accent space-y-1">
+                <div className="font-bold">[!] Sync Error Encountered</div>
+                <p className="text-[11px]">{syncFeedback.error}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border-rigid pb-2">
+                  <span className="text-muted-text">Admissions Synced:</span>
+                  <StatusChip status={`${syncFeedback?.synced ?? 0} SUCCESS`} variant="success" />
+                </div>
+                <div className="flex items-center justify-between border-b border-border-rigid pb-2">
+                  <span className="text-muted-text">Multi-Station Conflicts:</span>
+                  <StatusChip status={`${syncFeedback?.conflicts ?? 0} LOGGED`} variant={syncFeedback?.conflicts ? 'danger' : 'neutral'} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-text">Failed Invocations:</span>
+                  <StatusChip status={`${syncFeedback?.failed ?? 0} FAILED`} variant={syncFeedback?.failed ? 'danger' : 'neutral'} />
+                </div>
+              </div>
+            )}
+            <div className="pt-2 flex justify-end">
+              <Button variant="primary" size="sm" onClick={() => setSyncFeedback(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </Modal>
 
         {/* Live Result Overlay or Viewport */}
         {outcome ? (

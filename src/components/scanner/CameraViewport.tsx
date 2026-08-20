@@ -47,47 +47,65 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
         localScanner = new Html5Qrcode(elementId);
         html5QrCodeRef.current = localScanner;
 
-        const cameras = await Html5Qrcode.getCameras();
-        if (!isMounted) {
-          stopAllMediaTracks();
-          return;
+        const config = {
+          fps: 15,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        };
+
+        const scanSuccessCallback = (decodedText: string) => {
+          if (isMounted) {
+            onScan(decodedText);
+          }
+        };
+
+        const scanFailureCallback = () => {
+          // Ignore frame scan failures
+        };
+
+        // Prefer environment-facing camera, falling back to enumerated camera ID
+        try {
+          await localScanner.start(
+            { facingMode: 'environment' },
+            config,
+            scanSuccessCallback,
+            scanFailureCallback
+          );
+        } catch {
+          // Fallback to enumerated cameras if facingMode fails
+          const cameras = await Html5Qrcode.getCameras();
+          if (!isMounted) {
+            stopAllMediaTracks();
+            return;
+          }
+          if (cameras && cameras.length > 0) {
+            const cameraId = cameras[cameras.length - 1].id;
+            await localScanner.start(
+              cameraId,
+              config,
+              scanSuccessCallback,
+              scanFailureCallback
+            );
+          } else {
+            throw new Error('No camera devices detected.');
+          }
         }
 
-        if (cameras && cameras.length > 0) {
-          const cameraId = cameras[cameras.length - 1].id; // Prefer back camera
-          await localScanner.start(
-            cameraId,
-            {
-              fps: 15,
-              qrbox: { width: 250, height: 250 },
-              aspectRatio: 1.0,
-            },
-            (decodedText) => {
-              if (isMounted) {
-                onScan(decodedText);
-              }
-            },
-            () => {
-              // Ignore frame scan failures
-            }
-          );
-
-          if (isMounted) {
-            setScannerReady(true);
-          } else {
-            // Unmounted while start was resolving
-            if (localScanner.isScanning) {
-              await localScanner.stop().catch(() => {});
-            }
-            localScanner.clear();
-            stopAllMediaTracks();
-          }
+        if (isMounted) {
+          setScannerReady(true);
         } else {
-          if (isMounted) setHasCamera(false);
+          // Unmounted while start was resolving
+          if (localScanner.isScanning) {
+            await localScanner.stop().catch(() => {});
+          }
+          localScanner.clear();
+          html5QrCodeRef.current = null;
+          stopAllMediaTracks();
         }
       } catch (err) {
         console.warn('Camera access not granted or unavailable:', err);
         if (isMounted) setHasCamera(false);
+        html5QrCodeRef.current = null;
         stopAllMediaTracks();
       }
     };
@@ -99,6 +117,7 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
     return () => {
       isMounted = false;
       const scanner = html5QrCodeRef.current || localScanner;
+      html5QrCodeRef.current = null;
       if (scanner) {
         if (scanner.isScanning) {
           scanner.stop()
@@ -158,6 +177,7 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
         <input
           type="text"
           placeholder="Paste or type raw QR payload / token JSON..."
+          aria-label="Manual ticket or registration code"
           value={manualInput}
           onChange={(e) => setManualInput(e.target.value)}
           className="flex-1 h-11 bg-surface border border-border-rigid px-3 text-xs font-mono text-primary placeholder:text-muted-text focus:outline-none focus:border-b-2 focus:border-primary rounded-none"

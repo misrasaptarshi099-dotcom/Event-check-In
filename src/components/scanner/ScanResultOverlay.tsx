@@ -39,8 +39,11 @@ export function ScanResultOverlay({ outcome, onDismiss }: ScanResultOverlayProps
           {outcome.status === 'DUPLICATE' && '⚠ DUPLICATE DETECTED'}
           {outcome.status === 'CONFLICT' && '⚠ CONFLICT DETECTED'}
           {outcome.status === 'INVALID' && '✕ ACCESS DENIED'}
+          {outcome.status === 'PROVISIONAL' && '⚡ OFFLINE CHECK-IN STORED'}
         </span>
         <button
+          type="button"
+          aria-label="Dismiss scan result"
           onClick={onDismiss}
           className="text-surface hover:bg-surface/20 w-8 h-8 flex items-center justify-center font-bold border border-surface/40"
         >
@@ -68,7 +71,14 @@ export function ScanResultOverlay({ outcome, onDismiss }: ScanResultOverlayProps
             {outcome.checkedInAt && (
               <div className="flex justify-between">
                 <span className="opacity-80">Timestamp:</span>
-                <span>{new Date(outcome.checkedInAt).toLocaleTimeString()}</span>
+                <span>
+                  {new Date(outcome.checkedInAt).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                  })}
+                </span>
               </div>
             )}
             {outcome.stationId && (

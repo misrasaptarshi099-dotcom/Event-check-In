@@ -60,13 +60,14 @@ export async function getEventsByOrganizer(organizerId: string): Promise<EventIt
 
 /**
  * Retrieves all active upcoming public events for attendee discovery.
- * Concluded events are automatically filtered out.
+ * Filters out concluded events whose end time (or start time) is in the past,
+ * and sorts upcoming events in chronological order by eventDate.
  */
-export async function getAllPublicEvents(): Promise<EventItem[]> {
+export async function getAllPublicEvents(limitCount: number = 100): Promise<EventItem[]> {
   const snapshot = await adminDb
     .collection(EVENTS_COLLECTION)
     .orderBy('createdAt', 'desc')
-    .limit(100)
+    .limit(limitCount)
     .get();
 
   const now = Date.now();

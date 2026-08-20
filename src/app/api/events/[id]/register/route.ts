@@ -39,7 +39,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Attendee name is required.' }, { status: 400 });
     }
 
-    if (!attendeeEmail || typeof attendeeEmail !== 'string' || !attendeeEmail.includes('@')) {
+    const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!attendeeEmail || typeof attendeeEmail !== 'string' || !EMAIL_REGEX.test(attendeeEmail.trim())) {
       return NextResponse.json({ error: 'Valid attendee email is required.' }, { status: 400 });
     }
 

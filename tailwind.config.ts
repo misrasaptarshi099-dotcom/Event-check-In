@@ -29,7 +29,7 @@ const config: Config = {
         'border-rigid': '#0F0F0F',
       },
       fontFamily: {
-        serif: ['var(--font-pp-editorial)', 'Playfair Display', 'Georgia', 'serif'],
+        serif: ['"PP Editorial New"', 'Playfair Display', 'Georgia', 'serif'],
         mono: ['var(--font-geist-mono)', 'Geist Mono', 'Courier New', 'monospace'],
       },
       borderRadius: {

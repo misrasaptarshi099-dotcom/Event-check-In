@@ -19,11 +19,21 @@ export async function computeEventFinance(eventId: string): Promise<FinanceBundl
   const ticketPrice = Number(event.ticketPrice || 0);
   const currency = event.currency || 'USD';
 
-  // Fetch active registrations
-  const registrationsSnap = await adminDb
-    .collection('registrations')
-    .where('eventId', '==', eventId)
-    .get();
+  // Fetch event registrations constrained to latest 250 records for ledger
+  let registrationsSnap;
+  try {
+    registrationsSnap = await adminDb
+      .collection('registrations')
+      .where('eventId', '==', eventId)
+      .orderBy('createdAt', 'desc')
+      .limit(250)
+      .get();
+  } catch {
+    registrationsSnap = await adminDb
+      .collection('registrations')
+      .where('eventId', '==', eventId)
+      .get();
+  }
 
   const registrations = registrationsSnap.docs
     .map((doc) => doc.data() as Registration)

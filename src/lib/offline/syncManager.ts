@@ -107,12 +107,19 @@ async function syncSingleScan(
   scan: OfflineQueuedScan,
   attempt = 1
 ): Promise<SyncResult> {
-  try {
-    await updateScanStatus(scan.clientScanId, 'syncing');
+  await updateScanStatus(scan.clientScanId, 'syncing');
 
-    const response = await fetch(SYNC_ENDPOINT, {
+  let response: Response;
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('vouch_auth_token') : null;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    response = await fetch(SYNC_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         eventId: scan.eventId,
         registrationId: scan.registrationId,
@@ -123,54 +130,59 @@ async function syncSingleScan(
         clientScannedAt: scan.clientScannedAt,
       }),
     });
-
-    if (response.ok) {
-      await updateScanStatus(scan.clientScanId, 'synced', 'success');
-      return 'success';
-    }
-
-    if (response.status === 409) {
-      // Duplicate conflict — expected for multi-station scenarios
-      await updateScanStatus(scan.clientScanId, 'conflict', 'duplicate_conflict');
-      return 'duplicate_conflict';
-    }
-
-    // Non-409 4xx: terminal client error (bad token, invalid data) — no retry
-    if (response.status >= 400 && response.status < 500) {
-      await updateScanStatus(scan.clientScanId, 'failed', 'invalid_token');
-      return 'invalid_token';
-    }
-
-    // 5xx server error — retry
+  } catch (networkError) {
+    // Network failure — retry with jittered backoff
     if (attempt < MAX_RETRIES) {
-      await delay(RETRY_DELAY_MS * attempt);
-      return syncSingleScan(scan, attempt + 1);
-    }
-
-    await updateScanStatus(scan.clientScanId, 'failed', 'error');
-    return 'error';
-  } catch {
-    // Network failure — retry
-    if (attempt < MAX_RETRIES) {
-      await delay(RETRY_DELAY_MS * attempt);
+      const jitter = Math.floor(Math.random() * 500);
+      await delay(RETRY_DELAY_MS * attempt + jitter);
       return syncSingleScan(scan, attempt + 1);
     }
 
     await updateScanStatus(scan.clientScanId, 'failed', 'error');
     return 'error';
   }
+
+  if (response.ok) {
+    await updateScanStatus(scan.clientScanId, 'synced', 'success');
+    return 'success';
+  }
+
+  if (response.status === 409) {
+    // Duplicate conflict — expected for multi-station scenarios
+    await updateScanStatus(scan.clientScanId, 'conflict', 'duplicate_conflict');
+    return 'duplicate_conflict';
+  }
+
+  // Non-409 4xx: terminal client error (bad token, invalid data) — no retry
+  if (response.status >= 400 && response.status < 500) {
+    await updateScanStatus(scan.clientScanId, 'failed', 'invalid_token');
+    return 'invalid_token';
+  }
+
+  // 5xx server error — retry with jitter
+  if (attempt < MAX_RETRIES) {
+    const jitter = Math.floor(Math.random() * 500);
+    await delay(RETRY_DELAY_MS * attempt + jitter);
+    return syncSingleScan(scan, attempt + 1);
+  }
+
+  await updateScanStatus(scan.clientScanId, 'failed', 'error');
+  return 'error';
 }
 
 /**
  * Registers a listener for online/offline events to auto-trigger sync.
  */
-export function registerAutoSync(): () => void {
+export function registerAutoSync(
+  onComplete?: (results: { total: number; synced: number; conflicts: number; failed: number }) => void
+): () => void {
   const handler = () => {
     if (navigator.onLine) {
       console.log('[VOUCH SYNC] Network restored — draining offline queue...');
       drainOfflineQueue()
         .then((results) => {
           console.log('[VOUCH SYNC] Drain complete:', results);
+          if (onComplete) onComplete(results);
         })
         .catch((error) => {
           console.error('[VOUCH SYNC] Drain failed:', error);

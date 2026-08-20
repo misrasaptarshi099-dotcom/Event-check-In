@@ -284,8 +284,8 @@ export default function OrganizerDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {events.map((event) => {
-              const registered = event.capacity - event.spotsRemaining;
-              const fillPct = Math.round((registered / event.capacity) * 100);
+              const registered = Math.max(0, event.capacity - event.spotsRemaining);
+              const fillPct = event.capacity > 0 ? Math.round((registered / event.capacity) * 100) : 0;
               const estRevenue = registered * (event.ticketPrice || 0);
 
               return (

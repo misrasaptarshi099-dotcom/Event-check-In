@@ -61,11 +61,11 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   const bucketMap = new Map<string, number>();
   for (const checkin of checkins) {
     const date = new Date(checkin.checkedInAt);
-    // Use Intl.DateTimeFormat for timezone-aware hour/minute extraction
+    // Use Intl.DateTimeFormat with explicit h23 cycle for timezone-aware hour/minute extraction
     const parts = new Intl.DateTimeFormat('en-US', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
+      hourCycle: 'h23',
       timeZone: eventTimezone,
     }).formatToParts(date);
 

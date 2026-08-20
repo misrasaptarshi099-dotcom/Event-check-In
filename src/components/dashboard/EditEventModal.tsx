@@ -102,6 +102,7 @@ export function EditEventModal({ event, isOpen, onClose, onEventUpdated }: EditE
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update event.');
+      if (!data.event) throw new Error('Malformed update response from server.');
 
       onEventUpdated(data.event);
       onClose();

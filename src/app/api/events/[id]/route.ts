@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getEventById, updateEvent, deleteEvent } from '@/lib/services/events.service';
 import { verifyAuthToken, requireOwnership, requireRole } from '@/lib/security/rbac';
 
@@ -40,7 +41,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (name !== undefined) updates.name = String(name).trim();
     if (description !== undefined) updates.description = String(description).trim();
     if (eventDate !== undefined) updates.eventDate = new Date(eventDate).toISOString();
-    if (eventEndDate !== undefined) updates.eventEndDate = eventEndDate ? new Date(eventEndDate).toISOString() : null;
+    if (eventEndDate !== undefined) updates.eventEndDate = eventEndDate ? new Date(eventEndDate).toISOString() : FieldValue.delete();
     if (capacity !== undefined) updates.capacity = Math.max(1, Math.floor(Number(capacity)));
     if (timezone !== undefined) updates.timezone = String(timezone);
     if (venue !== undefined) updates.venue = String(venue).trim();

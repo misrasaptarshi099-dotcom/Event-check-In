@@ -41,37 +41,29 @@ export async function verifyAuthToken(authHeader: string | null): Promise<Authen
 
   const token = authHeader.replace('Bearer ', '').trim();
 
-  // Support local demo token bypass for load-testing/offline harnesses
-  if (token.startsWith('demo-')) {
-    const isOrganizer = token.includes('organizer') || token.includes('admin');
-    return {
-      uid: isOrganizer ? 'org_demo_admin' : 'att_demo_user',
-      email: isOrganizer ? 'misrsaptarshi099@gmail.com' : 'attendee@vouch.event',
-      role: isOrganizer ? 'organizer' : 'attendee',
-    };
-  }
-
+  let decoded;
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
-    const email = decoded.email || '';
-
-    // Check if email is an authorized organizer (seed or database)
-    const hasOrganizerAccess = await isAuthorizedOrganizer(email);
-    let role: UserRole = hasOrganizerAccess ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
-
-    // If user is an authorized organizer but custom claim not set yet, set it asynchronously
-    if (hasOrganizerAccess && decoded.role !== 'organizer') {
-      adminAuth.setCustomUserClaims(decoded.uid, { role: 'organizer' }).catch(() => {});
-    }
-
-    return {
-      uid: decoded.uid,
-      email,
-      role,
-    };
+    decoded = await adminAuth.verifyIdToken(token);
   } catch (error: any) {
     throw new AuthError(401, error.message || 'Invalid or expired authentication token.');
   }
+
+  const email = decoded.email || '';
+
+  // Check if email is an authorized organizer (seed or database)
+  const hasOrganizerAccess = await isAuthorizedOrganizer(email);
+  let role: UserRole = hasOrganizerAccess ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
+
+  // If user is an authorized organizer but custom claim not set yet, set it asynchronously
+  if (hasOrganizerAccess && decoded.role !== 'organizer') {
+    adminAuth.setCustomUserClaims(decoded.uid, { role: 'organizer' }).catch(() => {});
+  }
+
+  return {
+    uid: decoded.uid,
+    email,
+    role,
+  };
 }
 
 /**

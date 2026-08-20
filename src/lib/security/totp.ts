@@ -75,7 +75,7 @@ export function parseAndVerifyQrPayload(
 ): { isValid: boolean; payload?: QrPayload; error?: string } {
   try {
     const parsed: QrPayload = JSON.parse(rawPayload);
-    if (!parsed.r || !parsed.e || !parsed.t) {
+    if (!parsed.r || !parsed.e || !parsed.t || typeof parsed.ts !== 'number' || !Number.isFinite(parsed.ts)) {
       return { isValid: false, error: 'Malformed QR payload format.' };
     }
 

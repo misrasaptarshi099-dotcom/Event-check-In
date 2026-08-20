@@ -18,6 +18,18 @@ export interface TabsProps {
 }
 
 export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
+  const handleKeyDown = (e: React.KeyboardEvent, currentIndex: number) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % tabs.length;
+      onChange(tabs[nextIndex].id);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      onChange(tabs[prevIndex].id);
+    }
+  };
+
   return (
     <div
       role="tablist"
@@ -26,16 +38,21 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
         className
       )}
     >
-      {tabs.map((tab) => {
+      {tabs.map((tab, idx) => {
         const isActive = activeTab === tab.id;
         return (
           <button
             key={tab.id}
+            type="button"
             role="tab"
+            id={`tab-${tab.id}`}
             aria-selected={isActive}
+            aria-controls={`panel-${tab.id}`}
+            tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(tab.id)}
+            onKeyDown={(e) => handleKeyDown(e, idx)}
             className={clsx(
-              'flex items-center gap-2 px-5 py-3 text-xs uppercase tracking-wider transition-all duration-150 relative whitespace-nowrap border-r border-border-rigid rounded-none',
+              'flex items-center gap-2 px-5 py-3 text-xs uppercase tracking-wider transition-all duration-150 relative whitespace-nowrap border-r border-border-rigid rounded-none focus:outline-none focus:ring-1 focus:ring-primary',
               isActive
                 ? 'bg-primary text-surface font-semibold'
                 : 'text-muted-text hover:text-primary hover:bg-surface-high'

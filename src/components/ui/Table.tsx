@@ -4,7 +4,7 @@ import React from 'react';
 import { clsx } from 'clsx';
 
 export interface Column<T> {
-  key: string;
+  key: Extract<keyof T, string> | (string & {});
   header: string;
   render?: (item: T) => React.ReactNode;
   align?: 'left' | 'center' | 'right';
@@ -68,18 +68,21 @@ export function Table<T>({
                   onRowClick && 'cursor-pointer hover:bg-surface-high'
                 )}
               >
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    className={clsx(
-                      'px-4 py-3.5 border-r border-border-rigid last:border-r-0 whitespace-nowrap',
-                      col.align === 'right' && 'text-right font-mono tabular-nums',
-                      col.align === 'center' && 'text-center'
-                    )}
-                  >
-                    {col.render ? col.render(item) : (item as any)[col.key]}
-                  </td>
-                ))}
+                {columns.map((col) => {
+                  const val = (item as Record<string, unknown>)[col.key];
+                  return (
+                    <td
+                      key={col.key}
+                      className={clsx(
+                        'px-4 py-3.5 border-r border-border-rigid last:border-r-0 whitespace-nowrap',
+                        col.align === 'right' && 'text-right font-mono tabular-nums',
+                        col.align === 'center' && 'text-center'
+                      )}
+                    >
+                      {col.render ? col.render(item) : (val !== undefined && val !== null ? String(val) : '')}
+                    </td>
+                  );
+                })}
               </tr>
             ))
           )}

@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { performCheckin, CheckinError } from '@/lib/services/checkins.service';
 import { getRegistrationById } from '@/lib/services/registrations.service';
+import { getEventById } from '@/lib/services/events.service';
+import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, CHECKIN_SCAN_LIMIT } from '@/lib/security/rateLimit';
 
 export async function POST(request: Request) {
   try {
-    const rateLimitRes = checkRateLimit(getRateLimitKey(request), CHECKIN_SCAN_LIMIT);
+    const authHeader = request.headers.get('Authorization');
+    const authUser = await verifyAuthToken(authHeader);
+    requireRole(authUser, 'organizer');
+
+    const rateLimitRes = checkRateLimit(getRateLimitKey(request, authUser.uid), CHECKIN_SCAN_LIMIT);
     if (rateLimitRes) return rateLimitRes;
 
     const body = await request.json();
@@ -15,9 +21,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required sync fields.' }, { status: 400 });
     }
 
+    const event = await getEventById(eventId);
+    if (!event) {
+      return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
+    }
+
     const registration = await getRegistrationById(registrationId);
     if (!registration || registration.eventId !== eventId) {
-      return NextResponse.json({ error: 'Registration not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Registration not found for this event.' }, { status: 404 });
     }
 
     try {
@@ -47,6 +58,7 @@ export async function POST(request: Request) {
       throw error;
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Sync failed.' }, { status: 500 });
+    const status = error.statusCode || 500;
+    return NextResponse.json({ error: error.message || 'Sync failed.' }, { status });
   }
 }
