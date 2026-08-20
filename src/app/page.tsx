@@ -7,11 +7,13 @@ import type { EventItem } from '@/types';
 
 export default function HomePage() {
   const [role, setRole] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setRole(localStorage.getItem('vouch_user_role'));
+    setUserEmail(localStorage.getItem('vouch_user_email'));
 
     fetch('/api/events')
       .then((res) => res.json())
@@ -64,6 +66,13 @@ export default function HomePage() {
                 </Button>
               </Link>
             </>
+          )}
+          {role && userEmail && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 border border-border-rigid bg-surface-high text-[10px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+              <span className="font-semibold uppercase">{role}:</span>
+              <span className="text-muted-text truncate max-w-[160px]">{userEmail}</span>
+            </div>
           )}
           {role ? (
             <Button variant="ghost" size="sm" onClick={handleLogout}>

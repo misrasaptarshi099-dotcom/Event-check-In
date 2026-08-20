@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -23,6 +23,12 @@ const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebas
  * Firebase Client Auth instance
  */
 export const auth: Auth = getAuth(app);
+
+/**
+ * Google OAuth Provider instance
+ */
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 /**
  * Firebase Client Firestore instance

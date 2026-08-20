@@ -6,12 +6,15 @@ import { Button, StatusChip, ProgressBar } from '@/components/ui';
 import type { EventItem } from '@/types';
 
 export default function OrganizerDashboard() {
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const role = localStorage.getItem('vouch_user_role');
     const token = localStorage.getItem('vouch_auth_token');
+    const email = localStorage.getItem('vouch_user_email');
+    setUserEmail(email);
 
     if (!token || role !== 'organizer') {
       window.location.href = '/auth/login';
@@ -60,6 +63,13 @@ export default function OrganizerDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          {userEmail && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 border border-border-rigid bg-surface-high text-[10px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+              <span className="font-semibold uppercase">ORGANIZER:</span>
+              <span className="text-muted-text truncate max-w-[180px]">{userEmail}</span>
+            </div>
+          )}
           <Link href="/scanner">
             <Button variant="outline" size="sm">
               📷 Fast Gate Scanner
