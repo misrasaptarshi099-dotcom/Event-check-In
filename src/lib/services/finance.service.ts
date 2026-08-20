@@ -23,10 +23,11 @@ export async function computeEventFinance(eventId: string): Promise<FinanceBundl
   const registrationsSnap = await adminDb
     .collection('registrations')
     .where('eventId', '==', eventId)
-    .orderBy('createdAt', 'desc')
     .get();
 
-  const registrations = registrationsSnap.docs.map((doc) => doc.data() as Registration);
+  const registrations = registrationsSnap.docs
+    .map((doc) => doc.data() as Registration)
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   const activeRegistrations = registrations.filter((r) => r.status === 'active');
   const cancelledRegistrations = registrations.filter((r) => r.status === 'cancelled');

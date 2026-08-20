@@ -5,21 +5,22 @@ import { checkRateLimit, getRateLimitKey, REGISTRATION_LIMIT } from '@/lib/secur
 
 export async function GET(request: Request) {
   try {
-    const authHeader = request.headers.get('Authorization');
+    const { searchParams } = new URL(request.url);
+    const organizerOnly = searchParams.get('organizerOnly') === 'true';
 
-    // If authenticated as organizer, return their events; otherwise return public events
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
+    // If explicit organizer portfolio requested
+    if (organizerOnly) {
+      const authHeader = request.headers.get('Authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
         const user = await verifyAuthToken(authHeader);
         if (user.role === 'organizer') {
           const events = await getEventsByOrganizer(user.uid);
           return NextResponse.json({ events });
         }
-      } catch {
-        // Fall through to public events
       }
     }
 
+    // Default fast path: Return all public events
     const events = await getAllPublicEvents();
     return NextResponse.json({ events });
   } catch (error: any) {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     if (rateLimitRes) return rateLimitRes;
 
     const body = await request.json();
-    const { name, description, eventDate, capacity, timezone, venue, bannerUrl, ticketPrice, currency } = body;
+    const { name, description, eventDate, eventEndDate, capacity, timezone, venue, bannerUrl, ticketPrice, currency } = body;
 
     // Strict input validation
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -52,7 +53,18 @@ export async function POST(request: Request) {
     }
 
     if (!eventDate || isNaN(Date.parse(eventDate))) {
-      return NextResponse.json({ error: 'Valid event date is required.' }, { status: 400 });
+      return NextResponse.json({ error: 'Valid event start date is required.' }, { status: 400 });
+    }
+
+    let parsedEndDate: string | undefined = undefined;
+    if (eventEndDate) {
+      if (isNaN(Date.parse(eventEndDate))) {
+        return NextResponse.json({ error: 'Invalid event end date.' }, { status: 400 });
+      }
+      if (new Date(eventEndDate).getTime() < new Date(eventDate).getTime()) {
+        return NextResponse.json({ error: 'Event end time cannot be before start time.' }, { status: 400 });
+      }
+      parsedEndDate = new Date(eventEndDate).toISOString();
     }
 
     const event = await createEvent({
@@ -60,6 +72,7 @@ export async function POST(request: Request) {
       name: name.trim(),
       description: description?.trim() || undefined,
       eventDate: new Date(eventDate).toISOString(),
+      eventEndDate: parsedEndDate,
       capacity: Math.floor(parsedCapacity),
       timezone: timezone || 'UTC',
       venue: venue?.trim() || undefined,

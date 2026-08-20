@@ -23,6 +23,7 @@ export default function CreateEventPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState('');
+  const [eventEndDate, setEventEndDate] = useState('');
   const [timezone, setTimezone] = useState('America/New_York');
   const [venue, setVenue] = useState('');
   const [capacity, setCapacity] = useState('100');
@@ -41,6 +42,10 @@ export default function CreateEventPage() {
         throw new Error('You must be signed in as an organizer to create events.');
       }
 
+      if (eventEndDate && new Date(eventEndDate).getTime() < new Date(eventDate).getTime()) {
+        throw new Error('Event end time cannot be before start time.');
+      }
+
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: {
@@ -51,6 +56,7 @@ export default function CreateEventPage() {
           name: name.trim(),
           description: description.trim() || undefined,
           eventDate,
+          eventEndDate: eventEndDate || undefined,
           timezone,
           venue: venue.trim() || undefined,
           capacity: Number(capacity),
@@ -164,14 +170,22 @@ export default function CreateEventPage() {
                 onClear={() => setBannerUrl('')}
               />
 
-              {/* Date & Timezone */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Date, End Date & Timezone */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Input
-                  label="Event Date & Time"
+                  label="Start Date & Time"
                   type="datetime-local"
                   value={eventDate}
                   onChange={(e) => setEventDate(e.target.value)}
                   required
+                />
+
+                <Input
+                  label="End Date & Time"
+                  type="datetime-local"
+                  value={eventEndDate}
+                  onChange={(e) => setEventEndDate(e.target.value)}
+                  hint="For accurate no-show calculation"
                 />
 
                 <div className="space-y-1.5">

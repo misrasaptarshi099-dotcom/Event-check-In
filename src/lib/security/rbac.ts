@@ -52,20 +52,16 @@ export async function verifyAuthToken(authHeader: string | null): Promise<Authen
   }
 
   try {
-    const decoded = await adminAuth.verifyIdToken(token, true);
+    const decoded = await adminAuth.verifyIdToken(token);
     const email = decoded.email || '';
 
     // Check if email is an authorized organizer (seed or database)
     const hasOrganizerAccess = await isAuthorizedOrganizer(email);
     let role: UserRole = hasOrganizerAccess ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
 
-    // If user is an authorized organizer but custom claim not set yet, set it in background
+    // If user is an authorized organizer but custom claim not set yet, set it asynchronously
     if (hasOrganizerAccess && decoded.role !== 'organizer') {
-      try {
-        await adminAuth.setCustomUserClaims(decoded.uid, { role: 'organizer' });
-      } catch (claimErr) {
-        console.warn('Could not set custom claim on user:', claimErr);
-      }
+      adminAuth.setCustomUserClaims(decoded.uid, { role: 'organizer' }).catch(() => {});
     }
 
     return {

@@ -76,6 +76,7 @@ export default function TicketPage({ params }: PageParams) {
     qrToken: registrationId,
     totpSecret: 'JBSWY3DPEHPK3PXP', // Base32 fallback
     status: 'active',
+    guestCount: 1,
     createdAt: new Date().toISOString(),
   };
 

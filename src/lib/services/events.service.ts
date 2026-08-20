@@ -24,6 +24,7 @@ export async function createEvent(
   };
 
   if (data.description !== undefined) event.description = data.description;
+  if (data.eventEndDate !== undefined) event.eventEndDate = data.eventEndDate;
   if (data.timezone !== undefined) event.timezone = data.timezone;
   if (data.venue !== undefined) event.venue = data.venue;
   if (data.bannerUrl !== undefined) event.bannerUrl = data.bannerUrl;
@@ -50,10 +51,11 @@ export async function getEventsByOrganizer(organizerId: string): Promise<EventIt
   const snapshot = await adminDb
     .collection(EVENTS_COLLECTION)
     .where('organizerId', '==', organizerId)
-    .orderBy('createdAt', 'desc')
     .get();
 
-  return snapshot.docs.map((doc) => doc.data() as EventItem);
+  return snapshot.docs
+    .map((doc) => doc.data() as EventItem)
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
 
 /**
@@ -78,7 +80,7 @@ export async function getAllPublicEvents(): Promise<EventItem[]> {
  */
 export async function updateEvent(
   eventId: string,
-  updates: Partial<Pick<EventItem, 'name' | 'description' | 'eventDate' | 'capacity' | 'timezone' | 'venue' | 'bannerUrl' | 'ticketPrice' | 'currency'>>
+  updates: Partial<Pick<EventItem, 'name' | 'description' | 'eventDate' | 'eventEndDate' | 'capacity' | 'timezone' | 'venue' | 'bannerUrl' | 'ticketPrice' | 'currency'>>
 ): Promise<void> {
   const eventRef = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
 

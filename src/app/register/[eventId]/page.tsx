@@ -21,6 +21,7 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [guestCount, setGuestCount] = useState(1);
 
   useEffect(() => {
     fetch(`/api/events/${eventId}`)
@@ -50,6 +51,7 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
         body: JSON.stringify({
           attendeeName: name.trim(),
           attendeeEmail: email.trim().toLowerCase(),
+          guestCount,
         }),
       });
 
@@ -210,6 +212,40 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
                   required
                 />
 
+                {/* Guest Count Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest text-muted-text font-medium block">
+                    Number of Guests (Including You)
+                  </label>
+                  <div className="flex items-center gap-3 border-b border-border-rigid pb-3">
+                    <button
+                      type="button"
+                      onClick={() => setGuestCount(Math.max(1, guestCount - 1))}
+                      disabled={guestCount <= 1}
+                      className="w-10 h-10 border border-border-rigid bg-surface-high flex items-center justify-center text-lg font-bold text-primary hover:bg-primary hover:text-surface transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      −
+                    </button>
+                    <div className="flex-1 text-center">
+                      <span className="text-2xl font-bold text-primary">{guestCount}</span>
+                      <span className="text-[10px] text-muted-text block uppercase tracking-wider">
+                        {guestCount === 1 ? 'Just You' : `You + ${guestCount - 1} Guest${guestCount > 2 ? 's' : ''}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setGuestCount(Math.min(5, guestCount + 1))}
+                      disabled={guestCount >= 5 || (event ? guestCount >= event.spotsRemaining : false)}
+                      className="w-10 h-10 border border-border-rigid bg-surface-high flex items-center justify-center text-lg font-bold text-primary hover:bg-primary hover:text-surface transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-text">
+                    Max 5 per registration · {event?.spotsRemaining} seat{event?.spotsRemaining !== 1 ? 's' : ''} available
+                  </p>
+                </div>
+
                 <Button
                   type="submit"
                   variant="accent"
@@ -217,7 +253,9 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
                   loading={submitting}
                   className="w-full text-sm font-bold uppercase tracking-wider mt-2"
                 >
-                  {event?.ticketPrice ? `Reserve Seat · $${event.ticketPrice}` : 'Claim Free Pass'}
+                  {event?.ticketPrice
+                    ? `Reserve ${guestCount} Seat${guestCount > 1 ? 's' : ''} · $${event.ticketPrice * guestCount}`
+                    : `Claim ${guestCount} Free Pass${guestCount > 1 ? 'es' : ''}`}
                 </Button>
               </form>
             )}

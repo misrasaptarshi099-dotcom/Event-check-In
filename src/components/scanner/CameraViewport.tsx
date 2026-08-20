@@ -17,17 +17,45 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
   const [manualInput, setManualInput] = useState('');
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
+  // Helper to force-stop all tracks in any active video stream in the DOM
+  const stopAllMediaTracks = () => {
+    try {
+      const container = document.getElementById('vouch-reader');
+      if (container) {
+        const videos = container.querySelectorAll('video');
+        videos.forEach((video) => {
+          if (video.srcObject instanceof MediaStream) {
+            video.srcObject.getTracks().forEach((track) => {
+              track.stop();
+            });
+            video.srcObject = null;
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Error releasing media tracks:', e);
+    }
+  };
+
   useEffect(() => {
+    let isMounted = true;
+    let localScanner: Html5Qrcode | null = null;
     const elementId = 'vouch-reader';
-    const scanner = new Html5Qrcode(elementId);
-    html5QrCodeRef.current = scanner;
 
     const startScanner = async () => {
       try {
+        localScanner = new Html5Qrcode(elementId);
+        html5QrCodeRef.current = localScanner;
+
         const cameras = await Html5Qrcode.getCameras();
+        if (!isMounted) {
+          stopAllMediaTracks();
+          return;
+        }
+
         if (cameras && cameras.length > 0) {
           const cameraId = cameras[cameras.length - 1].id; // Prefer back camera
-          await scanner.start(
+          await localScanner.start(
             cameraId,
             {
               fps: 15,
@@ -35,19 +63,32 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
               aspectRatio: 1.0,
             },
             (decodedText) => {
-              onScan(decodedText);
+              if (isMounted) {
+                onScan(decodedText);
+              }
             },
             () => {
               // Ignore frame scan failures
             }
           );
-          setScannerReady(true);
+
+          if (isMounted) {
+            setScannerReady(true);
+          } else {
+            // Unmounted while start was resolving
+            if (localScanner.isScanning) {
+              await localScanner.stop().catch(() => {});
+            }
+            localScanner.clear();
+            stopAllMediaTracks();
+          }
         } else {
-          setHasCamera(false);
+          if (isMounted) setHasCamera(false);
         }
       } catch (err) {
         console.warn('Camera access not granted or unavailable:', err);
-        setHasCamera(false);
+        if (isMounted) setHasCamera(false);
+        stopAllMediaTracks();
       }
     };
 
@@ -56,9 +97,22 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
     }
 
     return () => {
-      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-        html5QrCodeRef.current.stop().catch(() => {});
+      isMounted = false;
+      const scanner = html5QrCodeRef.current || localScanner;
+      if (scanner) {
+        if (scanner.isScanning) {
+          scanner.stop()
+            .catch(() => {})
+            .finally(() => {
+              try { scanner.clear(); } catch {}
+              stopAllMediaTracks();
+            });
+        } else {
+          try { scanner.clear(); } catch {}
+          stopAllMediaTracks();
+        }
       }
+      stopAllMediaTracks();
     };
   }, [isScanning, onScan]);
 

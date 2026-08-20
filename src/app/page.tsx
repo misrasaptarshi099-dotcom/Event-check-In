@@ -2,19 +2,42 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth, getFreshAuthToken } from '@/lib/firebase/client';
 import { Button, StatusChip } from '@/components/ui';
-import type { EventItem } from '@/types';
+import type { EventItem, Registration } from '@/types';
+
+type EnrichedRegistration = Registration & { event?: EventItem };
 
 export default function HomePage() {
   const [role, setRole] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [myRegistrations, setMyRegistrations] = useState<EnrichedRegistration[]>([]);
   const [loading, setLoading] = useState(true);
+  const [passesLoading, setPassesLoading] = useState(false);
 
-  useEffect(() => {
-    setRole(localStorage.getItem('vouch_user_role'));
-    setUserEmail(localStorage.getItem('vouch_user_email'));
+  const fetchPasses = async (email: string) => {
+    if (!email) return;
+    setPassesLoading(true);
+    try {
+      const token = await getFreshAuthToken();
+      const res = await fetch(`/api/attendee/registrations?email=${encodeURIComponent(email)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (data.registrations) {
+        setMyRegistrations(data.registrations);
+      }
+    } catch (err) {
+      console.error('Failed to fetch attendee passes:', err);
+    } finally {
+      setPassesLoading(false);
+    }
+  };
 
+  const fetchPublicEvents = () => {
+    setLoading(true);
     fetch('/api/events')
       .then((res) => res.json())
       .then((data) => {
@@ -26,12 +49,44 @@ export default function HomePage() {
       })
       .catch((err) => console.error('Failed to load events:', err))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    const savedRole = localStorage.getItem('vouch_user_role');
+    const savedEmail = localStorage.getItem('vouch_user_email');
+
+    setRole(savedRole);
+    setUserEmail(savedEmail);
+
+    fetchPublicEvents();
+
+    if (savedEmail) {
+      fetchPasses(savedEmail);
+    }
+
+    // Listen to Firebase Auth state to keep token fresh
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user && user.email) {
+        setUserEmail(user.email);
+        localStorage.setItem('vouch_user_email', user.email);
+        localStorage.setItem('vouch_user_uid', user.uid);
+        const token = await user.getIdToken();
+        localStorage.setItem('vouch_auth_token', token);
+        fetchPasses(user.email);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch {}
     localStorage.removeItem('vouch_user_role');
     localStorage.removeItem('vouch_user_uid');
     localStorage.removeItem('vouch_user_email');
+    localStorage.removeItem('vouch_user_name');
     localStorage.removeItem('vouch_auth_token');
     window.location.reload();
   };
@@ -53,6 +108,13 @@ export default function HomePage() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {myRegistrations.length > 0 && (
+            <a href="#my-passes">
+              <Button variant="accent" size="sm" className="text-xs">
+                🎟️ My Passes ({myRegistrations.length})
+              </Button>
+            </a>
+          )}
           {role === 'organizer' && (
             <>
               <Link href="/scanner">
@@ -89,8 +151,8 @@ export default function HomePage() {
       </header>
 
       {/* Main Content Hero */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 md:px-12 py-16">
-        <div className="max-w-3xl w-full space-y-12 text-center">
+      <main className="flex-1 flex flex-col items-center justify-center px-6 md:px-12 py-12">
+        <div className="max-w-4xl w-full space-y-12 text-center">
           {/* Hero Title */}
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 px-3 py-1 border border-border-rigid bg-surface-high text-[10px] uppercase tracking-widest text-primary">
@@ -122,6 +184,19 @@ export default function HomePage() {
                   </Button>
                 </Link>
               </>
+            ) : myRegistrations.length > 0 ? (
+              <>
+                <a href="#my-passes" className="w-full sm:w-auto">
+                  <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    🎟️ View My Passes ({myRegistrations.length})
+                  </Button>
+                </a>
+                <a href="#events-ledger" className="w-full sm:w-auto">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto min-w-[200px]">
+                    Browse All Events
+                  </Button>
+                </a>
+              </>
             ) : role === 'attendee' ? (
               <a href="#events-ledger" className="w-full sm:w-auto">
                 <Button variant="accent" size="lg" className="w-full sm:w-auto min-w-[200px]">
@@ -144,7 +219,110 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Active Public Events Ledger */}
+          {/* 1. MY PASSES & REGISTERED EVENTS SECTION (If attendee has registrations) */}
+          {userEmail && (
+            <div id="my-passes" className="text-left space-y-4 pt-6 border-t border-border-rigid">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🎟️</span>
+                    <h3 className="text-xs uppercase tracking-widest font-bold text-primary">
+                      My Registered Events & Dynamic Passes
+                    </h3>
+                  </div>
+                  <p className="text-[10px] text-muted-text mt-0.5">
+                    Click any pass to access your live rotating cryptographic QR gate token
+                  </p>
+                </div>
+                <span className="text-[10px] bg-primary text-surface px-2 py-0.5 font-bold uppercase tracking-wider">
+                  {myRegistrations.length} Active {myRegistrations.length === 1 ? 'Pass' : 'Passes'}
+                </span>
+              </div>
+
+              {passesLoading ? (
+                <div className="p-8 text-center border border-border-rigid text-xs text-muted-text animate-pulse bg-surface-low">
+                  Retrieving your digital access ledger...
+                </div>
+              ) : myRegistrations.length === 0 ? (
+                <div className="border border-border-rigid p-6 text-center space-y-2 bg-surface-low">
+                  <p className="text-xs text-muted-text">
+                    You have not registered for any events yet under <span className="font-semibold text-primary">{userEmail}</span>.
+                  </p>
+                  <a href="#events-ledger" className="inline-block pt-1">
+                    <Button variant="outline" size="sm">
+                      Browse Open Events Below
+                    </Button>
+                  </a>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {myRegistrations.map((reg) => {
+                    const eventTitle = reg.event?.name || 'Event Pass';
+                    const eventDate = reg.event?.eventDate;
+                    const eventVenue = reg.event?.venue;
+
+                    return (
+                      <div
+                        key={reg.id}
+                        className="border-2 border-border-rigid bg-surface p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group"
+                      >
+                        {/* Status bar */}
+                        <div className="flex items-center justify-between border-b border-border-rigid pb-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-[#15803D] animate-ping" />
+                            <span className="text-[10px] uppercase font-bold text-primary tracking-widest">
+                              ACTIVE PASS
+                            </span>
+                          </div>
+                          {(reg.guestCount ?? 1) > 1 ? (
+                            <span className="text-[10px] bg-surface-high border border-border-rigid px-2 py-0.5 font-bold text-primary">
+                              {reg.guestCount} SEATS RESERVED
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-text uppercase">1 SEAT</span>
+                          )}
+                        </div>
+
+                        {/* Event Details */}
+                        <div className="space-y-1">
+                          <h4 className="text-xl font-serif italic font-medium text-primary tracking-tight">
+                            {eventTitle}
+                          </h4>
+                          {eventDate && (
+                            <p className="text-[11px] text-muted-text">
+                              📅 {new Date(eventDate).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · {new Date(eventDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          )}
+                          {eventVenue && (
+                            <p className="text-[11px] text-muted-text">📍 {eventVenue}</p>
+                          )}
+                          <p className="text-[10px] text-muted-text font-mono pt-1">
+                            Pass Assigned: <span className="text-primary">{reg.attendeeName}</span>
+                          </p>
+                        </div>
+
+                        {/* CTA button to open live pass & QR */}
+                        <div className="pt-2 border-t border-border-rigid">
+                          <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
+                            <Button
+                              variant="accent"
+                              size="md"
+                              className="w-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2"
+                            >
+                              <span>🎟️ Open Dynamic QR Pass</span>
+                              <span>→</span>
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 2. Active Public Events Ledger */}
           <div id="events-ledger" className="text-left space-y-3 pt-6 border-t border-border-rigid">
             <div className="flex items-center justify-between">
               <h3 className="text-xs uppercase tracking-widest font-bold text-muted-text">
@@ -176,50 +354,69 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="border border-border-rigid divide-y divide-border-rigid">
-                {events.map((event) => (
-                  <div
-                    key={event.id}
-                    className="grid-ledger-row p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-serif italic text-lg font-medium text-primary">
-                          {event.name}
-                        </span>
-                        {event.ticketPrice ? (
-                          <span className="text-[10px] px-1.5 py-0.5 border border-border-rigid bg-surface-high font-bold">
-                            ${event.ticketPrice} {event.currency || 'USD'}
+                {events.map((event) => {
+                  const userReg = myRegistrations.find((r) => r.eventId === event.id);
+
+                  return (
+                    <div
+                      key={event.id}
+                      className="grid-ledger-row p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-serif italic text-lg font-medium text-primary">
+                            {event.name}
                           </span>
+                          {event.ticketPrice ? (
+                            <span className="text-[10px] px-1.5 py-0.5 border border-border-rigid bg-surface-high font-bold">
+                              ${event.ticketPrice} {event.currency || 'USD'}
+                            </span>
+                          ) : (
+                            <StatusChip status="FREE ADMISSION" variant="success" />
+                          )}
+                          {userReg && (
+                            <StatusChip status="REGISTERED" variant="success" />
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-text muted-label">
+                          {new Date(event.eventDate).toLocaleDateString([], {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                          })}{' '}
+                          · {event.spotsRemaining} spots remaining of {event.capacity}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {userReg ? (
+                          <Link href={`/ticket/${userReg.id}?eventId=${event.id}`}>
+                            <Button
+                              variant="accent"
+                              size="sm"
+                              className="bg-[#15803D] hover:bg-[#166534] border-[#15803D] text-[11px] font-bold"
+                            >
+                              🎟️ View QR Pass
+                            </Button>
+                          </Link>
                         ) : (
-                          <StatusChip status="FREE ADMISSION" variant="success" />
+                          <Link href={`/register/${event.id}`}>
+                            <Button variant="accent" size="sm">
+                              Register
+                            </Button>
+                          </Link>
+                        )}
+                        {role === 'organizer' && (
+                          <Link href={`/organizer/events/${event.id}`}>
+                            <Button variant="outline" size="sm">
+                              Dashboard
+                            </Button>
+                          </Link>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-text muted-label">
-                        {new Date(event.eventDate).toLocaleDateString([], {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })}{' '}
-                        · {event.spotsRemaining} spots remaining of {event.capacity}
-                      </p>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <Link href={`/register/${event.id}`}>
-                        <Button variant="accent" size="sm">
-                          Register
-                        </Button>
-                      </Link>
-                      {role === 'organizer' && (
-                        <Link href={`/organizer/events/${event.id}`}>
-                          <Button variant="outline" size="sm">
-                            Dashboard
-                          </Button>
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

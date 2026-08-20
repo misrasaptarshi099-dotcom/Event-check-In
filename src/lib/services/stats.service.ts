@@ -38,9 +38,21 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   const checkins = checkinsSnap.docs.map((doc) => doc.data() as Checkin);
   const checkedInCount = checkins.length;
 
-  // Compute no-show metrics (clamped to 0 to handle cancelled registrations)
-  const noShowCount = Math.max(0, registeredCount - checkedInCount);
-  const noShowPct = registeredCount > 0 ? Math.round((noShowCount / registeredCount) * 100) : 0;
+  // Determine if the event has concluded
+  const now = Date.now();
+  const eventStartTime = new Date(event.eventDate).getTime();
+  // If eventEndDate is explicitly set, use that; otherwise default to 3 hours after start time
+  const eventEndTime = event.eventEndDate
+    ? new Date(event.eventEndDate).getTime()
+    : eventStartTime + (3 * 60 * 60 * 1000);
+
+  const isEventFinished = now >= eventEndTime;
+
+  // Compute no-show metrics (only calculated after event concludes)
+  const noShowCount = isEventFinished ? Math.max(0, registeredCount - checkedInCount) : 0;
+  const noShowPct = isEventFinished
+    ? (registeredCount > 0 ? Math.round((noShowCount / registeredCount) * 100) : 0)
+    : null;
 
   // Resolve event timezone for stable bucketing across deployments
   const eventTimezone = event.timezone || 'UTC';
@@ -83,6 +95,9 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   return {
     eventId,
     eventName: event.name,
+    eventDate: event.eventDate,
+    eventEndDate: event.eventEndDate,
+    isEventFinished,
     capacity: event.capacity,
     spotsRemaining: event.spotsRemaining,
     registeredCount,

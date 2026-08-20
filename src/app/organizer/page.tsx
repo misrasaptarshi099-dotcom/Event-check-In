@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button, Input, StatusChip, ProgressBar } from '@/components/ui';
+import { EditEventModal } from '@/components/dashboard/EditEventModal';
 import type { EventItem } from '@/types';
 
 interface OrganizerRecord {
@@ -16,6 +17,13 @@ export default function OrganizerDashboard() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Event Edit & Delete State
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [deletingEvent, setDeletingEvent] = useState<EventItem | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Team Management State
   const [organizers, setOrganizers] = useState<OrganizerRecord[]>([]);
@@ -42,6 +50,53 @@ export default function OrganizerDashboard() {
     }
   };
 
+  const fetchEvents = async () => {
+    const token = localStorage.getItem('vouch_auth_token');
+    if (!token) return;
+
+    try {
+      const res = await fetch('/api/events?organizerOnly=true', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.events) {
+        setEvents(data.events);
+      }
+    } catch (err) {
+      console.error('Failed to load events:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!deletingEvent) return;
+    setDeleteLoading(true);
+
+    const token = localStorage.getItem('vouch_auth_token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`/api/events/${deletingEvent.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete event.');
+      }
+
+      setShowDeleteModal(false);
+      setDeletingEvent(null);
+      await fetchEvents();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete event.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   useEffect(() => {
     const role = localStorage.getItem('vouch_user_role');
     const token = localStorage.getItem('vouch_auth_token');
@@ -53,22 +108,7 @@ export default function OrganizerDashboard() {
       return;
     }
 
-    fetch('/api/events', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.events) {
-          setEvents(data.events);
-        } else if (data.error) {
-          console.error('API Error:', data.error);
-        }
-      })
-      .catch((err) => console.error('Failed to load events:', err))
-      .finally(() => setLoading(false));
-
+    fetchEvents();
     fetchOrganizers();
   }, []);
 
@@ -314,15 +354,39 @@ export default function OrganizerDashboard() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="border-t border-border-rigid p-3 bg-surface-high flex gap-2">
+                  <div className="border-t border-border-rigid p-3 bg-surface-high flex items-center gap-2">
                     <Link href={`/organizer/events/${event.id}`} className="flex-1">
                       <Button variant="primary" size="sm" className="w-full text-[11px]">
                         Operations Hub
                       </Button>
                     </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[11px]"
+                      onClick={() => {
+                        setEditingEvent(event);
+                        setShowEditModal(true);
+                      }}
+                      title="Edit event details"
+                    >
+                      ✏️ Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[11px] text-accent hover:border-accent"
+                      onClick={() => {
+                        setDeletingEvent(event);
+                        setShowDeleteModal(true);
+                      }}
+                      title="Delete event"
+                    >
+                      🗑️
+                    </Button>
                     <Link href={`/register/${event.id}`} target="_blank">
                       <Button variant="outline" size="sm" className="text-[11px]" title="Open Attendee Registration">
-                        🔗 Register
+                        🔗 Pass
                       </Button>
                     </Link>
                   </div>
@@ -416,6 +480,63 @@ export default function OrganizerDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Event Modal */}
+      <EditEventModal
+        event={editingEvent}
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingEvent(null);
+        }}
+        onEventUpdated={() => {
+          fetchEvents();
+        }}
+      />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deletingEvent && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-mono">
+          <div className="bg-surface border-2 border-border-rigid w-full max-w-md shadow-2xl p-6 sm:p-8 space-y-6">
+            <div className="space-y-2 border-b border-border-rigid pb-4">
+              <div className="flex items-center gap-2 text-accent text-sm font-bold uppercase tracking-wider">
+                <span>⚠️</span>
+                <span>Permanent Deletion</span>
+              </div>
+              <h3 className="text-xl font-serif italic text-primary font-medium tracking-tight">
+                Delete &ldquo;{deletingEvent.name}&rdquo;?
+              </h3>
+              <p className="text-xs text-muted-text leading-relaxed">
+                This action will permanently delete this event, all associated registrations, and check-in history from Firestore. This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeletingEvent(null);
+                }}
+                disabled={deleteLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="accent"
+                size="md"
+                loading={deleteLoading}
+                onClick={handleDeleteEvent}
+              >
+                Yes, Delete Event
+              </Button>
             </div>
           </div>
         </div>

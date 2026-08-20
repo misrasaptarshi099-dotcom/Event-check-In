@@ -19,7 +19,8 @@ export interface EventItem {
   organizerId: string;
   name: string;
   description?: string;
-  eventDate: string; // ISO date string
+  eventDate: string; // ISO start date/time string
+  eventEndDate?: string; // ISO end date/time string
   timezone?: string; // IANA timezone (e.g. 'America/New_York'), defaults to 'UTC'
   venue?: string; // Location or venue name
   bannerUrl?: string; // Banner image URL or base64 data string
@@ -39,6 +40,7 @@ export interface Registration {
   qrToken: string;
   totpSecret: string; // Base32 RFC 6238 secret (delivered once to attendee)
   status: RegistrationStatus;
+  guestCount: number; // Number of seats reserved (1–5, includes the registrant)
   ticketPrice?: number;
   createdAt: string;
 }
@@ -79,12 +81,15 @@ export interface CheckinTimeBucket {
 export interface StatsBundle {
   eventId: string;
   eventName: string;
+  eventDate?: string;
+  eventEndDate?: string;
+  isEventFinished: boolean;
   capacity: number;
   spotsRemaining: number;
   registeredCount: number;
   checkedInCount: number;
   noShowCount: number;
-  noShowPct: number;
+  noShowPct: number | null; // null if event is ongoing or in future
   checkinsBy15Min: CheckinTimeBucket[];
   peakCheckinBucket: string;
   peakCheckinCount: number;

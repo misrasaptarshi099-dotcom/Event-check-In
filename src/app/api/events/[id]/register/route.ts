@@ -15,7 +15,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (rateLimitRes) return rateLimitRes;
 
     const body = await request.json();
-    const { attendeeId, attendeeName, attendeeEmail } = body;
+    const { attendeeId, attendeeName, attendeeEmail, guestCount: rawGuestCount } = body;
 
     if (!attendeeName || typeof attendeeName !== 'string' || attendeeName.trim().length === 0) {
       return NextResponse.json({ error: 'Attendee name is required.' }, { status: 400 });
@@ -23,6 +23,12 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!attendeeEmail || typeof attendeeEmail !== 'string' || !attendeeEmail.includes('@')) {
       return NextResponse.json({ error: 'Valid attendee email is required.' }, { status: 400 });
+    }
+
+    // Validate guest count: 1–5 (includes the registrant)
+    const guestCount = Math.floor(Number(rawGuestCount) || 1);
+    if (guestCount < 1 || guestCount > 5) {
+      return NextResponse.json({ error: 'Guest count must be between 1 and 5.' }, { status: 400 });
     }
 
     // Generate or use attendee ID
@@ -34,7 +40,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       eventId,
       resolvedAttendeeId,
       attendeeName.trim(),
-      attendeeEmail.trim().toLowerCase()
+      attendeeEmail.trim().toLowerCase(),
+      guestCount
     );
 
     return NextResponse.json({ registration }, { status: 201 });

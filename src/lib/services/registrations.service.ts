@@ -31,7 +31,8 @@ export async function registerForEvent(
   eventId: string,
   attendeeId: string,
   attendeeName: string,
-  attendeeEmail: string
+  attendeeEmail: string,
+  guestCount: number = 1
 ): Promise<Registration> {
   const eventRef = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
   const regId = `${eventId}_${attendeeId}`;
@@ -52,14 +53,17 @@ export async function registerForEvent(
       throw new RegistrationError(409, 'You are already registered for this event.');
     }
 
-    // 3. Validate capacity
+    // 3. Validate capacity against guest count
     if (event.spotsRemaining <= 0) {
       throw new RegistrationError(409, 'Event is full. No spots remaining.');
     }
+    if (event.spotsRemaining < guestCount) {
+      throw new RegistrationError(409, `Only ${event.spotsRemaining} spot(s) remaining. Cannot reserve ${guestCount} seats.`);
+    }
 
-    // 4. Atomically decrement spots_remaining
+    // 4. Atomically decrement spots_remaining by guestCount
     transaction.update(eventRef, {
-      spotsRemaining: event.spotsRemaining - 1,
+      spotsRemaining: event.spotsRemaining - guestCount,
     });
 
     // 5. Generate TOTP secret and create registration record
@@ -75,6 +79,7 @@ export async function registerForEvent(
       qrToken: regId,
       totpSecret,
       status: 'active',
+      guestCount,
       ticketPrice: event.ticketPrice ?? 0,
       createdAt: now,
     };
@@ -101,10 +106,11 @@ export async function getRegistrationsByEvent(eventId: string): Promise<Registra
   const snapshot = await adminDb
     .collection(REGISTRATIONS_COLLECTION)
     .where('eventId', '==', eventId)
-    .orderBy('createdAt', 'desc')
     .get();
 
-  return snapshot.docs.map((doc) => doc.data() as Registration);
+  return snapshot.docs
+    .map((doc) => doc.data() as Registration)
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
 
 /**
@@ -114,8 +120,9 @@ export async function getRegistrationsByAttendee(attendeeId: string): Promise<Re
   const snapshot = await adminDb
     .collection(REGISTRATIONS_COLLECTION)
     .where('attendeeId', '==', attendeeId)
-    .orderBy('createdAt', 'desc')
     .get();
 
-  return snapshot.docs.map((doc) => doc.data() as Registration);
+  return snapshot.docs
+    .map((doc) => doc.data() as Registration)
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }

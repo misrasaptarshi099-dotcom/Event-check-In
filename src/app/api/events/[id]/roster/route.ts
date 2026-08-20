@@ -28,16 +28,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const registrations = await getRegistrationsByEvent(eventId);
 
-    const roster: CachedRosterEntry[] = registrations.map((r) => ({
-      registrationId: r.id,
-      qrToken: r.qrToken,
-      totpSecret: r.totpSecret,
-      attendeeName: r.attendeeName,
-      attendeeEmail: r.attendeeEmail,
-      status: r.status,
-    }));
-
-    return NextResponse.json({ roster });
+    return NextResponse.json({ roster: registrations });
   } catch (error: any) {
     const status = error.statusCode || 500;
     return NextResponse.json({ error: error.message || 'Failed to fetch roster.' }, { status });

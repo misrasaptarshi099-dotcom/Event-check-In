@@ -182,8 +182,9 @@ export async function getSyncLogsByEvent(eventId: string): Promise<CheckinSyncLo
   const snapshot = await adminDb
     .collection('checkin_sync_log')
     .where('eventId', '==', eventId)
-    .orderBy('syncedAt', 'desc')
     .get();
 
-  return snapshot.docs.map((doc) => doc.data() as CheckinSyncLog);
+  return snapshot.docs
+    .map((doc) => doc.data() as CheckinSyncLog)
+    .sort((a, b) => new Date(b.syncedAt || 0).getTime() - new Date(a.syncedAt || 0).getTime());
 }

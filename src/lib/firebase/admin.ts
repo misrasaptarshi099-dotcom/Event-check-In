@@ -52,10 +52,15 @@ const adminApp = getAdminApp();
  */
 export const adminAuth: Auth = getAuth(adminApp);
 
+const firestoreDbId = process.env.FIRESTORE_DATABASE_ID || process.env.NEXT_PUBLIC_FIRESTORE_DATABASE_ID;
+
 /**
  * Firebase Admin Firestore instance (server-side)
  * Used for atomic transactions (runTransaction) in API route handlers.
  */
-export const adminDb: Firestore = getFirestore(adminApp);
+export const adminDb: Firestore =
+  firestoreDbId && firestoreDbId !== '(default)'
+    ? getFirestore(adminApp, firestoreDbId)
+    : getFirestore(adminApp);
 
 export default adminApp;

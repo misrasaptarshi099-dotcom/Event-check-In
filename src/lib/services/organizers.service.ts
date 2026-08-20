@@ -14,6 +14,13 @@ export interface OrganizerRecord {
   isPrimary?: boolean;
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs = 2500, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
+  ]);
+}
+
 /**
  * Checks whether an email is an authorized organizer.
  * Checks default seeds, environment list, and Firestore database.
@@ -22,7 +29,7 @@ export async function isAuthorizedOrganizer(email?: string | null): Promise<bool
   if (!email) return false;
   const normalized = email.trim().toLowerCase();
 
-  // Check hardcoded seed & env overrides
+  // Check hardcoded seed & env overrides (instant)
   if (SEED_ORGANIZER_EMAILS.includes(normalized)) return true;
 
   const envList = (process.env.ORGANIZER_EMAILS || process.env.NEXT_PUBLIC_ORGANIZER_EMAILS || '')
@@ -32,10 +39,14 @@ export async function isAuthorizedOrganizer(email?: string | null): Promise<bool
 
   if (envList.includes(normalized)) return true;
 
-  // Check Firestore organizers collection
+  // Check Firestore organizers collection with 2.5s timeout
   try {
-    const doc = await adminDb.collection(ORGANIZERS_COLLECTION).doc(normalized).get();
-    return doc.exists;
+    const doc = await withTimeout(
+      adminDb.collection(ORGANIZERS_COLLECTION).doc(normalized).get(),
+      2500,
+      null
+    );
+    return doc ? doc.exists : false;
   } catch (err) {
     console.error('Error checking organizer status in Firestore:', err);
     return false;
@@ -72,17 +83,23 @@ export async function getAllOrganizers(): Promise<OrganizerRecord[]> {
     });
   }
 
-  // 2. Fetch added organizers from Firestore
+  // 2. Fetch added organizers from Firestore with timeout protection
   try {
-    const snapshot = await adminDb.collection(ORGANIZERS_COLLECTION).get();
-    for (const doc of snapshot.docs) {
-      const data = doc.data() as OrganizerRecord;
-      records.set(doc.id, {
-        email: doc.id,
-        addedBy: data.addedBy || 'Organizer Admin',
-        createdAt: data.createdAt || new Date().toISOString(),
-        isPrimary: SEED_ORGANIZER_EMAILS.includes(doc.id),
-      });
+    const snapshot = await withTimeout(
+      adminDb.collection(ORGANIZERS_COLLECTION).get(),
+      2500,
+      null
+    );
+    if (snapshot) {
+      for (const doc of snapshot.docs) {
+        const data = doc.data() as OrganizerRecord;
+        records.set(doc.id, {
+          email: doc.id,
+          addedBy: data.addedBy || 'Organizer Admin',
+          createdAt: data.createdAt || new Date().toISOString(),
+          isPrimary: SEED_ORGANIZER_EMAILS.includes(doc.id),
+        });
+      }
     }
   } catch (err) {
     console.error('Error listing organizers from Firestore:', err);

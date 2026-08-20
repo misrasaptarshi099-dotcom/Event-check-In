@@ -57,22 +57,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickDemo = (selectedRole: 'organizer' | 'attendee') => {
-    const mockUid = selectedRole === 'organizer' ? 'org_demo_admin' : 'att_demo_user';
-    const mockEmail = selectedRole === 'organizer' ? 'misrsaptarshi099@gmail.com' : 'attendee@vouch.event';
-
-    localStorage.setItem('vouch_user_role', selectedRole);
-    localStorage.setItem('vouch_user_uid', mockUid);
-    localStorage.setItem('vouch_user_email', mockEmail);
-    localStorage.setItem('vouch_auth_token', `demo-${selectedRole}-token`);
-
-    if (selectedRole === 'organizer') {
-      router.push('/organizer');
-    } else {
-      router.push('/');
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">
       {/* Top Header */}
@@ -152,33 +136,6 @@ export default function LoginPage() {
                 <strong className="text-primary">Organizers:</strong> Strictly restricted to approved administrators (e.g. <span className="font-mono text-accent">misrsaptarshi099@gmail.com</span> or team members invited by an existing organizer).
               </li>
             </ul>
-          </div>
-
-          {/* Local Dev & Testing Bypass */}
-          <div className="border-t border-border-rigid pt-4 space-y-2 text-center">
-            <p className="text-[10px] uppercase tracking-widest text-muted-text">
-              Local Dev & Testing Bypass:
-            </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="flex-1 text-[11px]"
-                onClick={() => handleQuickDemo('organizer')}
-              >
-                Demo Organizer
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="flex-1 text-[11px]"
-                onClick={() => handleQuickDemo('attendee')}
-              >
-                Demo Attendee
-              </Button>
-            </div>
           </div>
         </div>
       </main>

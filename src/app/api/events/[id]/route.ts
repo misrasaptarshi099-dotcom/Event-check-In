@@ -34,12 +34,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
     requireOwnership(user, event.organizerId);
 
     const body = await request.json();
-    const { name, description, eventDate, capacity, timezone, venue, bannerUrl, ticketPrice, currency } = body;
+    const { name, description, eventDate, eventEndDate, capacity, timezone, venue, bannerUrl, ticketPrice, currency } = body;
 
     const updates: Record<string, any> = {};
     if (name !== undefined) updates.name = String(name).trim();
     if (description !== undefined) updates.description = String(description).trim();
     if (eventDate !== undefined) updates.eventDate = new Date(eventDate).toISOString();
+    if (eventEndDate !== undefined) updates.eventEndDate = eventEndDate ? new Date(eventEndDate).toISOString() : null;
     if (capacity !== undefined) updates.capacity = Math.max(1, Math.floor(Number(capacity)));
     if (timezone !== undefined) updates.timezone = String(timezone);
     if (venue !== undefined) updates.venue = String(venue).trim();
