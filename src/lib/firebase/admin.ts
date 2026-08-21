@@ -20,6 +20,51 @@ let cachedApp: App | null = null;
 let cachedAuth: Auth | null = null;
 let cachedDb: Firestore | null = null;
 
+export function formatFirebasePrivateKey(key: string): string {
+  if (!key) return '';
+
+  let formatted = key.trim();
+
+  // 1. Strip wrapping quotes
+  if (
+    (formatted.startsWith('"') && formatted.endsWith('"')) ||
+    (formatted.startsWith("'") && formatted.endsWith("'"))
+  ) {
+    formatted = formatted.slice(1, -1);
+  }
+
+  // 2. Normalize escaped newlines
+  formatted = formatted.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+
+  // 3. Base64 check if user pasted a base64 encoded PEM key
+  if (!formatted.includes('-----BEGIN PRIVATE KEY-----')) {
+    try {
+      const decoded = Buffer.from(formatted, 'base64').toString('utf8');
+      if (decoded.includes('-----BEGIN PRIVATE KEY-----')) {
+        formatted = decoded;
+      }
+    } catch {
+      // not base64
+    }
+  }
+
+  // 4. Reconstruct standard 64-char chunked PEM key
+  const header = '-----BEGIN PRIVATE KEY-----';
+  const footer = '-----END PRIVATE KEY-----';
+
+  if (formatted.includes(header) && formatted.includes(footer)) {
+    const rawBody = formatted
+      .replace(header, '')
+      .replace(footer, '')
+      .replace(/\s+/g, '');
+
+    const chunks = rawBody.match(/.{1,64}/g) || [];
+    formatted = `${header}\n${chunks.join('\n')}\n${footer}\n`;
+  }
+
+  return formatted;
+}
+
 export function getAdminApp(): App {
   if (cachedApp) return cachedApp;
 
@@ -28,21 +73,29 @@ export function getAdminApp(): App {
     return cachedApp;
   }
 
-  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const projectId =
+    process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
   if (!projectId || !clientEmail || !privateKeyRaw) {
+    const missing: string[] = [];
+    if (!projectId) missing.push('FIREBASE_PROJECT_ID (or NEXT_PUBLIC_FIREBASE_PROJECT_ID)');
+    if (!clientEmail) missing.push('FIREBASE_CLIENT_EMAIL');
+    if (!privateKeyRaw) missing.push('FIREBASE_PRIVATE_KEY');
+
     throw new Error(
-      'Firebase Admin SDK configuration error: ' +
-      'FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY must all be set.'
+      `Firebase Admin SDK configuration error on server: Missing required environment variables: [${missing.join(', ')}]. ` +
+      'Please verify these are configured in your Vercel Project Settings -> Environment Variables.'
     );
   }
+
+  const formattedPrivateKey = formatFirebasePrivateKey(privateKeyRaw);
 
   const serviceAccount: ServiceAccount = {
     projectId,
     clientEmail,
-    privateKey: privateKeyRaw.replace(/\\n/g, '\n'),
+    privateKey: formattedPrivateKey,
   };
 
   cachedApp = initializeApp({
