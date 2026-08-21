@@ -46,7 +46,7 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (
         event.reason?.name === 'AbortError' ||
-        String(event.reason?.message || '').includes('play()') ||
+        String(event.reason?.message || '').includes('The play() request was interrupted') ||
         String(event.reason || '').includes('The play() request was interrupted')
       ) {
         event.preventDefault();

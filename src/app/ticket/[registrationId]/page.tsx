@@ -90,9 +90,9 @@ export default function TicketPage({ params }: PageParams) {
     createdAt: new Date().toISOString(),
   };
 
-  const isEventEnded = displayEvent.eventEndDate
-    ? new Date(displayEvent.eventEndDate).getTime() <= Date.now()
-    : (displayEvent.eventDate ? new Date(displayEvent.eventDate).getTime() <= Date.now() : false);
+  const isEventEnded = event?.eventEndDate
+    ? new Date(event.eventEndDate).getTime() <= Date.now()
+    : false;
 
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface-low text-primary">

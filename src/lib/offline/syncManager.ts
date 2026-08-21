@@ -4,6 +4,7 @@ import {
   updateScanStatus,
   clearSyncedScans,
 } from './db';
+import { getFreshAuthToken } from '@/lib/firebase/client';
 import type { OfflineQueuedScan, SyncResult } from '@/types';
 
 /**
@@ -21,87 +22,68 @@ import type { OfflineQueuedScan, SyncResult } from '@/types';
  */
 
 const SYNC_ENDPOINT = '/api/checkins/sync';
-const MAX_CONCURRENT_SYNCS = 5;
-const RETRY_DELAY_MS = 2_000;
 const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
-/** Module-level in-flight guard to prevent overlapping drains */
-let activeDrain: Promise<{
-  total: number;
-  synced: number;
-  conflicts: number;
-  failed: number;
-}> | null = null;
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Drains the offline queue by syncing all pending scans to the server.
- * Serializes concurrent calls so the same pending scans aren't submitted twice.
- * Returns a summary of sync results.
+ * Executes a full sync drain cycle.
+ *
+ * Returns a summary of synced, conflicting, and failed records.
  */
-export async function drainOfflineQueue(): Promise<{
+export async function drainSyncQueue(): Promise<{
   total: number;
   synced: number;
   conflicts: number;
   failed: number;
+  remaining: number;
 }> {
-  if (activeDrain) {
-    return activeDrain;
+  // Step 1: Recover scans interrupted during previous sync attempts or previous failures
+  await recoverInterruptedScans();
+
+  // Step 2: Read all pending scans
+  const pending = await getPendingScans();
+  const total = pending.length;
+  if (total === 0) {
+    return { total: 0, synced: 0, conflicts: 0, failed: 0, remaining: 0 };
   }
 
-  activeDrain = performDrain();
-  try {
-    return await activeDrain;
-  } finally {
-    activeDrain = null;
+  let synced = 0;
+  let conflicts = 0;
+  let failed = 0;
+
+  // Step 3: Process each scan sequentially to maintain order
+  for (const scan of pending) {
+    const result = await syncSingleScan(scan);
+    if (result === 'success') synced++;
+    else if (result === 'duplicate_conflict') conflicts++;
+    else failed++;
   }
+
+  // Step 4: Clean up successfully synced entries
+  await clearSyncedScans();
+
+  const remaining = (await getPendingScans()).length;
+
+  return { total, synced, conflicts, failed, remaining };
 }
 
-async function performDrain(): Promise<{
-  total: number;
-  synced: number;
-  conflicts: number;
-  failed: number;
-}> {
-  // Recover interrupted and failed scans before draining
+export const drainOfflineQueue = drainSyncQueue;
+
+/**
+ * Recovers scans stuck in 'syncing' or 'failed' status so they are re-queued.
+ */
+export async function recoverInterruptedScans(): Promise<number> {
   const recoverable = await getRecoverableScans();
   for (const scan of recoverable) {
     await updateScanStatus(scan.clientScanId, 'pending');
   }
-
-  const pending = await getPendingScans();
-  const results = { total: pending.length, synced: 0, conflicts: 0, failed: 0 };
-
-  if (pending.length === 0) return results;
-
-  // Process in batches to limit concurrent requests
-  for (let i = 0; i < pending.length; i += MAX_CONCURRENT_SYNCS) {
-    const batch = pending.slice(i, i + MAX_CONCURRENT_SYNCS);
-    const batchResults = await Promise.allSettled(
-      batch.map((scan) => syncSingleScan(scan))
-    );
-
-    for (const result of batchResults) {
-      if (result.status === 'fulfilled') {
-        const outcome = result.value;
-        if (outcome === 'success') results.synced++;
-        else if (outcome === 'duplicate_conflict') results.conflicts++;
-        else results.failed++;
-      } else {
-        results.failed++;
-      }
-    }
-  }
-
-  // Clean up successfully synced entries
-  await clearSyncedScans();
-
-  return results;
+  return recoverable.length;
 }
 
 /**
- * Syncs a single scan to the server with retry logic.
- * Non-409 4xx responses are terminal (no retry).
- * 5xx and network errors are retried up to MAX_RETRIES.
+ * Attempts to sync a single scan with exponential backoff.
  */
 async function syncSingleScan(
   scan: OfflineQueuedScan,
@@ -110,8 +92,11 @@ async function syncSingleScan(
   await updateScanStatus(scan.clientScanId, 'syncing');
 
   let response: Response;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('vouch_auth_token') : null;
+    const token = await getFreshAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -120,6 +105,7 @@ async function syncSingleScan(
     response = await fetch(SYNC_ENDPOINT, {
       method: 'POST',
       headers,
+      signal: controller.signal,
       body: JSON.stringify({
         eventId: scan.eventId,
         registrationId: scan.registrationId,
@@ -131,6 +117,8 @@ async function syncSingleScan(
       }),
     });
   } catch (networkError) {
+    clearTimeout(timeoutId);
+
     // Network failure — retry with jittered backoff
     if (attempt < MAX_RETRIES) {
       const jitter = Math.floor(Math.random() * 500);
@@ -140,6 +128,8 @@ async function syncSingleScan(
 
     await updateScanStatus(scan.clientScanId, 'failed', 'error');
     return 'error';
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (response.ok) {
@@ -192,8 +182,4 @@ export function registerAutoSync(
 
   window.addEventListener('online', handler);
   return () => window.removeEventListener('online', handler);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

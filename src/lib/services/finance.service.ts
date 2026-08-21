@@ -19,14 +19,13 @@ export async function computeEventFinance(eventId: string): Promise<FinanceBundl
   const ticketPrice = Number(event.ticketPrice || 0);
   const currency = event.currency || 'USD';
 
-  // Fetch event registrations constrained to latest 250 records for ledger
+  // Fetch all event registrations for accurate aggregate computation
   let registrationsSnap;
   try {
     registrationsSnap = await adminDb
       .collection('registrations')
       .where('eventId', '==', eventId)
       .orderBy('createdAt', 'desc')
-      .limit(250)
       .get();
   } catch {
     registrationsSnap = await adminDb
@@ -64,8 +63,8 @@ export async function computeEventFinance(eventId: string): Promise<FinanceBundl
 
   const averageOrderValue = activeRegistrations.length > 0 ? Math.round(grossRevenue / activeRegistrations.length) : 0;
 
-  // Build transaction ledger with guestCount-scaled amounts
-  const recentTransactions: TransactionEntry[] = registrations.map((r) => ({
+  // Build transaction ledger (constrained to latest 250 records) with guestCount-scaled amounts
+  const recentTransactions: TransactionEntry[] = registrations.slice(0, 250).map((r) => ({
     id: `tx_${r.id}`,
     registrationId: r.id,
     attendeeName: (r.guestCount || 1) > 1

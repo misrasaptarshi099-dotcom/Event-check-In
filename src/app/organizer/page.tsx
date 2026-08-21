@@ -107,8 +107,6 @@ export default function OrganizerDashboard() {
       if (user && user.email) {
         setUserEmail(user.email);
         localStorage.setItem('vouch_user_email', user.email);
-        const token = await user.getIdToken();
-        localStorage.setItem('vouch_auth_token', token);
       }
     });
 

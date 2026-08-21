@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAiInsight } from '@/lib/services/ai-insights.service';
 import { getEventById } from '@/lib/services/events.service';
-import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
+import { verifyAuthToken, requireRole, requireOwnership } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, AI_INSIGHTS_LIMIT } from '@/lib/security/rateLimit';
 
 interface RouteParams {
@@ -19,6 +19,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
+
+    requireOwnership(user, event.organizerId);
 
     // Strict rate limiting (max 5 AI requests/min per organizer) to prevent billing surges
     const rateLimitRes = checkRateLimit(getRateLimitKey(request, user.uid), AI_INSIGHTS_LIMIT);

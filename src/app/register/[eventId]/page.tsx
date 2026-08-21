@@ -88,13 +88,11 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      const idToken = await user.getIdToken();
       const email = user.email || '';
 
       localStorage.setItem('vouch_user_uid', user.uid);
       localStorage.setItem('vouch_user_email', email);
       localStorage.setItem('vouch_user_name', user.displayName || '');
-      localStorage.setItem('vouch_auth_token', idToken);
 
       setUserEmail(email);
       setName(user.displayName || '');
@@ -174,7 +172,7 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
 
   const isSoldOut = event ? event.spotsRemaining <= 0 : false;
   const isStarted = event ? new Date(event.eventDate).getTime() <= Date.now() : false;
-  const isEnded = event?.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : isStarted;
+  const isEnded = event?.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : false;
   const isRegistrationClosed = isStarted || isEnded;
 
   const registeredCount = event ? event.capacity - event.spotsRemaining : 0;

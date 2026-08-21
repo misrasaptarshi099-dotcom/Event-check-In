@@ -63,21 +63,24 @@ export async function getEventsByOrganizer(organizerId: string): Promise<EventIt
  * Event ownership remains recorded for auditing, but operational access is
  * shared by the organization rather than tied to a single Firebase UID.
  */
-export async function getAllOrganizerEvents(): Promise<EventItem[]> {
-  const snapshot = await adminDb.collection(EVENTS_COLLECTION).orderBy('createdAt', 'desc').get();
+export async function getAllOrganizerEvents(limitCount: number = 100): Promise<EventItem[]> {
+  const snapshot = await adminDb
+    .collection(EVENTS_COLLECTION)
+    .orderBy('createdAt', 'desc')
+    .limit(limitCount)
+    .get();
   return snapshot.docs.map((doc) => doc.data() as EventItem);
 }
 
 /**
  * Retrieves all active upcoming public events for attendee discovery.
  * Filters out concluded events whose end time (or start time) is in the past,
- * and sorts upcoming events in chronological order by eventDate.
+ * and sorts upcoming events in chronological order by eventDate before slicing to limitCount.
  */
 export async function getAllPublicEvents(limitCount: number = 100): Promise<EventItem[]> {
   const snapshot = await adminDb
     .collection(EVENTS_COLLECTION)
     .orderBy('createdAt', 'desc')
-    .limit(limitCount)
     .get();
 
   const now = Date.now();
@@ -85,13 +88,14 @@ export async function getAllPublicEvents(limitCount: number = 100): Promise<Even
   return snapshot.docs
     .map((doc) => doc.data() as EventItem)
     .filter((event) => {
-      // Concluded events (past end date or start date) are excluded from public discovery
+      // Concluded events (past end date or past start date if no end date) are excluded from public discovery
       const endTime = event.eventEndDate
         ? new Date(event.eventEndDate).getTime()
         : new Date(event.eventDate).getTime();
       return endTime > now;
     })
-    .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+    .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
+    .slice(0, limitCount);
 }
 
 /**

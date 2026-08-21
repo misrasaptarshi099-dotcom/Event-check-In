@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createEvent, getAllOrganizerEvents, getAllPublicEvents } from '@/lib/services/events.service';
+import { createEvent, getAllOrganizerEvents, getEventsByOrganizer, getAllPublicEvents } from '@/lib/services/events.service';
 import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, REGISTRATION_LIMIT } from '@/lib/security/rateLimit';
 
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     if (organizerOnly) {
       const user = await verifyAuthToken(request.headers.get('Authorization'));
       requireRole(user, 'organizer');
-      return NextResponse.json({ events: await getAllOrganizerEvents() });
+      return NextResponse.json({ events: await getEventsByOrganizer(user.uid) });
     }
 
     // Default fast path: Return all public events

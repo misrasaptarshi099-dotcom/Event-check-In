@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { performCheckin, CheckinError } from '@/lib/services/checkins.service';
 import { getRegistrationById } from '@/lib/services/registrations.service';
 import { getEventById } from '@/lib/services/events.service';
-import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
+import { parseAndVerifyQrPayload, verifyTotpToken } from '@/lib/security/totp';
+import { verifyAuthToken, requireRole, requireOwnership } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, CHECKIN_SCAN_LIMIT } from '@/lib/security/rateLimit';
 
 export async function POST(request: Request) {
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     if (rateLimitRes) return rateLimitRes;
 
     const body = await request.json();
-    const { eventId, registrationId, stationId, clientScanId, clientScannedAt } = body;
+    const { eventId, registrationId, stationId, clientScanId, clientScannedAt, qrToken, otp, rawQrPayload } = body;
 
     if (!eventId || !registrationId || !clientScanId) {
       return NextResponse.json({ error: 'Missing required sync fields.' }, { status: 400 });
@@ -26,22 +27,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
 
-    const scanTimeMs = clientScannedAt ? new Date(clientScannedAt).getTime() : Date.now();
+    requireOwnership(authUser, event.organizerId);
+
+    const now = Date.now();
     const eventStartMs = new Date(event.eventDate).getTime();
     const checkinOpenMs = eventStartMs - (30 * 60 * 1000);
     const eventEndMs = event.eventEndDate
       ? new Date(event.eventEndDate).getTime()
       : eventStartMs + (3 * 60 * 60 * 1000);
 
-    if (scanTimeMs < checkinOpenMs) {
+    if (now < checkinOpenMs) {
       return NextResponse.json(
-        { error: 'Gate admission had not opened at time of scan (opens 30 mins before event start).' },
+        { error: 'Gate admission has not opened yet (opens 30 mins before event start).' },
         { status: 400 }
       );
     }
-    if (scanTimeMs >= eventEndMs) {
+    if (now >= eventEndMs) {
       return NextResponse.json(
-        { error: 'Event was already concluded at time of scan.' },
+        { error: 'Event has concluded. Gate check-in is closed.' },
         { status: 400 }
       );
     }
@@ -49,6 +52,32 @@ export async function POST(request: Request) {
     const registration = await getRegistrationById(registrationId);
     if (!registration || registration.eventId !== eventId) {
       return NextResponse.json({ error: 'Registration not found for this event.' }, { status: 404 });
+    }
+
+    if (registration.status !== 'active') {
+      return NextResponse.json({ error: 'Registration is cancelled.' }, { status: 400 });
+    }
+
+    // Credential Verification
+    if (rawQrPayload) {
+      const verification = parseAndVerifyQrPayload(
+        rawQrPayload,
+        registration.totpSecret,
+        registrationId,
+        eventId
+      );
+      if (!verification.isValid) {
+        return NextResponse.json({ error: verification.error || 'Invalid QR payload.' }, { status: 400 });
+      }
+    } else if (otp) {
+      const isOtpValid = verifyTotpToken(otp.trim(), registration.totpSecret);
+      if (!isOtpValid) {
+        return NextResponse.json({ error: 'Invalid manual OTP code.' }, { status: 400 });
+      }
+    } else if (qrToken) {
+      if (qrToken !== registration.qrToken && qrToken !== registration.id) {
+        return NextResponse.json({ error: 'Invalid QR token credential.' }, { status: 400 });
+      }
     }
 
     try {

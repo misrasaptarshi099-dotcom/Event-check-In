@@ -76,9 +76,12 @@ export default function ScannerPage() {
     }
   };
 
-  const handleScan = async (rawDecodedText: string) => {
+  const outcomeRef = React.useRef(outcome);
+  outcomeRef.current = outcome;
+
+  const handleScan = React.useCallback(async (rawDecodedText: string) => {
     // Prevent scanning while an outcome modal is active
-    if (outcome) return;
+    if (outcomeRef.current) return;
 
     try {
       let regId = '';
@@ -122,7 +125,22 @@ export default function ScannerPage() {
           }),
         });
 
-        const result: ScanOutcome = await res.json();
+        const data = await res.json();
+        let result: ScanOutcome;
+
+        if (!res.ok) {
+          result = {
+            status: data.status || 'INVALID',
+            message: data.message || data.error || 'Check-in validation rejected.',
+            registrationId: data.registrationId || regId,
+            attendeeName: data.attendeeName,
+            checkedInAt: data.checkedInAt,
+            stationId: data.stationId || stationId,
+          };
+        } else {
+          result = data as ScanOutcome;
+        }
+
         setOutcome(result);
         setScanHistory((prev) => [result, ...prev.slice(0, 20)]);
       } else {
@@ -159,7 +177,7 @@ export default function ScannerPage() {
         message: err.message || 'Scan verification failed.',
       });
     }
-  };
+  }, [isOnline, stationId]);
 
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">

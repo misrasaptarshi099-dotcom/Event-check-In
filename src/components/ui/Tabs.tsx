@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { clsx } from 'clsx';
 
 export interface TabItem {
@@ -18,15 +18,27 @@ export interface TabsProps {
 }
 
 export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
   const handleKeyDown = (e: React.KeyboardEvent, currentIndex: number) => {
+    let targetIndex = -1;
     if (e.key === 'ArrowRight') {
       e.preventDefault();
-      const nextIndex = (currentIndex + 1) % tabs.length;
-      onChange(tabs[nextIndex].id);
+      targetIndex = (currentIndex + 1) % tabs.length;
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-      onChange(tabs[prevIndex].id);
+      targetIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      targetIndex = 0;
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      targetIndex = tabs.length - 1;
+    }
+
+    if (targetIndex >= 0 && targetIndex < tabs.length) {
+      onChange(tabs[targetIndex].id);
+      tabRefs.current[targetIndex]?.focus();
     }
   };
 
@@ -43,6 +55,9 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
         return (
           <button
             key={tab.id}
+            ref={(el) => {
+              tabRefs.current[idx] = el;
+            }}
             type="button"
             role="tab"
             id={`tab-${tab.id}`}

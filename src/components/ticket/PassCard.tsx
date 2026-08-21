@@ -21,7 +21,7 @@ export function PassCard({ event, registration, className }: PassCardProps) {
 
   const isEnded = event.eventEndDate
     ? new Date(event.eventEndDate).getTime() <= now
-    : (event.eventDate ? new Date(event.eventDate).getTime() <= now : false);
+    : false;
 
   const formattedDate = new Date(event.eventDate).toLocaleDateString('en-US', {
     weekday: 'short',

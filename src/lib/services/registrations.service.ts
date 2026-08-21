@@ -139,6 +139,7 @@ export async function getRegistrationsByEvent(eventId: string): Promise<Registra
       const checkin = checkinsMap.get(reg.id);
       return {
         ...reg,
+        totpSecret: '', // Sanitized: secret is not exposed in public/organizer roster payload
         checkedIn: !!checkin,
         checkedInAt: checkin?.checkedInAt,
       };

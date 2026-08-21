@@ -26,6 +26,7 @@ export function DynamicQrCode({
 
   useEffect(() => {
     let active = true;
+    lastEpochRef.current = null;
 
     const updateCode = async () => {
       if (!totpSecret || !registrationId || !eventId) return;

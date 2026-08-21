@@ -45,7 +45,10 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   const checkins = checkinsSnap.docs.map((doc) => doc.data() as Checkin);
   let checkedInCount = 0;
   for (const checkin of checkins) {
-    checkedInCount += regGuestMap.get(checkin.registrationId) || 1;
+    const seats = regGuestMap.get(checkin.registrationId);
+    if (seats !== undefined) {
+      checkedInCount += seats;
+    }
   }
 
   // Determine if the event has concluded
@@ -85,7 +88,8 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
       .toString()
       .padStart(2, '0');
     const bucketKey = `${hourPart}:${minuteBucket}`;
-    bucketMap.set(bucketKey, (bucketMap.get(bucketKey) || 0) + 1);
+    const checkinSeats = regGuestMap.get(checkin.registrationId) || 1;
+    bucketMap.set(bucketKey, (bucketMap.get(bucketKey) || 0) + checkinSeats);
   }
 
   const checkinsBy15Min: CheckinTimeBucket[] = Array.from(bucketMap.entries())

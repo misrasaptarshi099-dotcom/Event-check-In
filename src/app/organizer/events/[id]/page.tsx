@@ -111,12 +111,12 @@ export default function EventDashboardPage({ params }: PageParams) {
   };
 
   useEffect(() => {
+    if (showEditModal) {
+      return;
+    }
+
     const controller = new AbortController();
     fetchData(controller.signal);
-
-    if (showEditModal) {
-      return () => controller.abort();
-    }
 
     // Auto-refresh stats every 10 seconds during active event
     const interval = setInterval(() => {
@@ -129,7 +129,9 @@ export default function EventDashboardPage({ params }: PageParams) {
     };
   }, [fetchData, showEditModal]);
 
-  const totalBookedSeats = registrations.reduce((sum, r) => sum + (r.guestCount || 1), 0);
+  const totalBookedSeats = registrations
+    .filter((r) => r.status !== 'cancelled')
+    .reduce((sum, r) => sum + (r.guestCount || 1), 0);
 
   const tabs = [
     { id: 'operations', label: '📊 Operations & Live Gate', badge: stats ? `${stats.checkedInCount}/${stats.registeredCount}` : undefined },
@@ -142,7 +144,7 @@ export default function EventDashboardPage({ params }: PageParams) {
   const isEventConcluded = stats?.isEventFinished ?? (
     event?.eventEndDate
       ? new Date(event.eventEndDate).getTime() <= Date.now()
-      : (event?.eventDate ? new Date(event.eventDate).getTime() <= Date.now() : false)
+      : false
   );
 
   const rosterColumns: Column<Registration>[] = [
@@ -351,7 +353,7 @@ export default function EventDashboardPage({ params }: PageParams) {
       <main className="flex-1 p-6 md:px-12 md:py-8 max-w-7xl w-full mx-auto space-y-6">
         {/* 1. OPERATIONS TAB */}
         {activeTab === 'operations' && stats && (
-          <div className="space-y-6 animate-in fade-in duration-150">
+          <div id="panel-operations" role="tabpanel" aria-labelledby="tab-operations" className="space-y-6 animate-in fade-in duration-150">
             {/* Live KPI Metric Tiles */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <MetricCard
@@ -395,21 +397,21 @@ export default function EventDashboardPage({ params }: PageParams) {
 
         {/* 2. FINANCE TAB */}
         {activeTab === 'finance' && finance && (
-          <div className="animate-in fade-in duration-150">
+          <div id="panel-finance" role="tabpanel" aria-labelledby="tab-finance" className="animate-in fade-in duration-150">
             <FinanceAnalyticsView finance={finance} eventId={event.id} />
           </div>
         )}
 
         {/* 3. GEMINI AI INTELLIGENCE TAB */}
         {activeTab === 'ai' && (
-          <div className="animate-in fade-in duration-150">
+          <div id="panel-ai" role="tabpanel" aria-labelledby="tab-ai" className="animate-in fade-in duration-150">
             <AiInsightsTerminal eventId={event.id} />
           </div>
         )}
 
         {/* 4. ATTENDEE ROSTER TAB */}
         {activeTab === 'roster' && (
-          <div className="space-y-4 animate-in fade-in duration-150">
+          <div id="panel-roster" role="tabpanel" aria-labelledby="tab-roster" className="space-y-4 animate-in fade-in duration-150">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-base font-serif italic text-primary font-medium tracking-tight">
@@ -422,7 +424,26 @@ export default function EventDashboardPage({ params }: PageParams) {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => window.open(`/api/events/${event.id}/export`, '_blank')}
+                onClick={async () => {
+                  try {
+                    const token = await getFreshAuthToken();
+                    const res = await fetch(`/api/events/${event.id}/export`, {
+                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    });
+                    if (!res.ok) throw new Error('Failed to download export');
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${event.name.replace(/[^a-z0-9]/gi, '_')}_export.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                  } catch (e) {
+                    console.error('Export download failed:', e);
+                  }
+                }}
               >
                 📥 Export Attendee CSV
               </Button>
@@ -439,7 +460,7 @@ export default function EventDashboardPage({ params }: PageParams) {
 
         {/* 5. SYNC & CONFLICTS TAB */}
         {activeTab === 'conflicts' && (
-          <div className="animate-in fade-in duration-150">
+          <div id="panel-conflicts" role="tabpanel" aria-labelledby="tab-conflicts" className="animate-in fade-in duration-150">
             <SyncConflictDrawer logs={syncLogs} />
           </div>
         )}

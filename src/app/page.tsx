@@ -379,7 +379,7 @@ export default function HomePage() {
                 {events.map((event) => {
                   const userReg = myRegistrations.find((r) => r.eventId === event.id);
                   const isStarted = new Date(event.eventDate).getTime() <= Date.now();
-                  const isEnded = event.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : isStarted;
+                  const isEnded = event.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : false;
                   const isClosed = isStarted || isEnded;
 
                   return (

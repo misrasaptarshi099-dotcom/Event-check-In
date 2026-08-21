@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getRegistrationsByEvent } from '@/lib/services/registrations.service';
 import { getCheckinsByEvent } from '@/lib/services/checkins.service';
 import { getEventById } from '@/lib/services/events.service';
-import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
+import { verifyAuthToken, requireRole, requireOwnership } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, EXPORT_LIMIT } from '@/lib/security/rateLimit';
 
 interface RouteParams {
@@ -20,6 +20,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
+
+    requireOwnership(user, event.organizerId);
 
     const rateLimitRes = checkRateLimit(getRateLimitKey(request, user.uid), EXPORT_LIMIT);
     if (rateLimitRes) return rateLimitRes;
@@ -55,6 +57,13 @@ export async function GET(request: Request, { params }: RouteParams) {
       'Registered At',
     ];
 
+    const escapeCell = (val: string | null | undefined): string => {
+      if (!val) return '""';
+      const str = String(val);
+      const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+
     const rows = registrations.map((r) => {
       const checkin = checkinMap.get(r.id);
       const seats = r.guestCount || 1;
@@ -71,18 +80,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       }
 
       return [
-        `"${r.id}"`,
-        `"${r.attendeeName.replace(/"/g, '""')}"`,
-        `"${r.attendeeEmail.replace(/"/g, '""')}"`,
+        escapeCell(r.id),
+        escapeCell(r.attendeeName),
+        escapeCell(r.attendeeEmail),
         seats,
         unitPrice,
         totalPaid,
-        `"${r.status}"`,
-        `"${lifecycleStatus}"`,
+        escapeCell(r.status),
+        escapeCell(lifecycleStatus),
         checkin ? 'YES' : 'NO',
-        checkin ? `"${checkin.checkedInAt}"` : '""',
-        checkin ? `"${checkin.stationId}"` : '""',
-        `"${r.createdAt}"`,
+        escapeCell(checkin?.checkedInAt),
+        escapeCell(checkin?.stationId),
+        escapeCell(r.createdAt),
       ].join(',');
     });
 
