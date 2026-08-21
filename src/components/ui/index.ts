@@ -7,3 +7,5 @@ export { Modal, type ModalProps } from './Modal';
 export { Table, type TableProps, type Column } from './Table';
 export { ProgressBar, CountdownRing, type ProgressBarProps, type CountdownRingProps } from './Progress';
 export { ImageUpload, type ImageUploadProps } from './ImageUpload';
+export { MarkdownView } from './MarkdownView';
+

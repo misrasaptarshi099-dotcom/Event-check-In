@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { clsx } from 'clsx';
 import { Button } from '../ui/Button';
 import { StatusChip } from '../ui/StatusChip';
+import { MarkdownView } from '../ui/MarkdownView';
 import { getFreshAuthToken } from '@/lib/firebase/client';
 import type { AiInsightResponse } from '@/lib/services/ai-insights.service';
 
@@ -176,8 +177,8 @@ export function AiInsightsTerminal({ eventId, className }: AiInsightsTerminalPro
                   <span className="text-[10px] text-muted-text">{item.timestamp}</span>
                 </div>
               </div>
-              <div className="text-xs sm:text-sm text-primary leading-relaxed whitespace-pre-wrap font-sans">
-                {item.answer}
+              <div className="pt-1">
+                <MarkdownView content={item.answer} />
               </div>
             </div>
           ))
