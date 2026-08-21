@@ -28,21 +28,33 @@ export function getAdminApp(): App {
     return cachedApp;
   }
 
-  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const projectId =
+    process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+  let privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
   if (!projectId || !clientEmail || !privateKeyRaw) {
+    const missing: string[] = [];
+    if (!projectId) missing.push('FIREBASE_PROJECT_ID (or NEXT_PUBLIC_FIREBASE_PROJECT_ID)');
+    if (!clientEmail) missing.push('FIREBASE_CLIENT_EMAIL');
+    if (!privateKeyRaw) missing.push('FIREBASE_PRIVATE_KEY');
+
     throw new Error(
-      'Firebase Admin SDK configuration error: ' +
-      'FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY must all be set.'
+      `Firebase Admin SDK configuration error on server: Missing required environment variables: [${missing.join(', ')}]. ` +
+      'Please verify these are configured in your Vercel Project Settings -> Environment Variables.'
     );
   }
+
+  // Robust formatting: Strip wrapping quotes and parse newlines
+  const formattedPrivateKey = privateKeyRaw
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\\n/g, '\n');
 
   const serviceAccount: ServiceAccount = {
     projectId,
     clientEmail,
-    privateKey: privateKeyRaw.replace(/\\n/g, '\n'),
+    privateKey: formattedPrivateKey,
   };
 
   cachedApp = initializeApp({
