@@ -151,11 +151,11 @@ export function CardNav({
         {/* Desktop Navigation Row (Hidden on Mobile) */}
         <div className="hidden md:flex items-center gap-3">
           {passesCount > 0 && (
-            <a href="/#my-passes">
+            <Link href="/#my-passes">
               <Button variant="accent" size="sm" className="text-xs">
                 🎟️ My Passes ({passesCount})
               </Button>
-            </a>
+            </Link>
           )}
 
           {isOrganizer && (
@@ -212,11 +212,11 @@ export function CardNav({
         {/* Mobile Navigation Trigger (Card Nav Button from React Bits style) */}
         <div className="flex md:hidden items-center gap-2">
           {passesCount > 0 && (
-            <a href="/#my-passes" onClick={() => setIsOpen(false)}>
+            <Link href="/#my-passes" onClick={() => setIsOpen(false)}>
               <span className="px-2 py-1 bg-accent text-surface text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm">
                 <span>🎟️</span> {passesCount}
               </span>
-            </a>
+            </Link>
           )}
 
           <button

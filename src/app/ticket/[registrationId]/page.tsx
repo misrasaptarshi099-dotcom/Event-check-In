@@ -56,8 +56,8 @@ export default function TicketPage({ params }: PageParams) {
           }
         }
       } catch (err: any) {
-        if (isMounted && !registration) {
-          setFetchError(err.message || 'Ticket not found or access denied.');
+        if (isMounted) {
+          setFetchError((prev) => prev || err.message || 'Ticket not found or access denied.');
         }
       } finally {
         if (isMounted) setLoading(false);
