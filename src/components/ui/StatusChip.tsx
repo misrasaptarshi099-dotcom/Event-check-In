@@ -17,7 +17,7 @@ export const StatusChip: React.FC<StatusChipProps> = ({
     neutral: 'border-border-rigid text-primary bg-transparent',
     success: 'border-border-rigid text-primary bg-surface-container font-semibold',
     critical: 'border-accent text-accent bg-accent/5 font-semibold',
-    danger: 'border-accent text-accent bg-accent/5 font-semibold',
+,g    danger: 'border-accent text-accent bg-accent/5 font-semibold',
     warning: 'border-amber-700 text-amber-900 bg-amber-50 font-semibold',
     provisional: 'border-amber-600 text-amber-800 bg-amber-100/50 italic',
   };
