@@ -15,7 +15,8 @@ export interface PassCardProps {
 
 export function PassCard({ event, registration, className }: PassCardProps) {
   const now = Date.now();
-  const isCancelled = registration.status === 'cancelled';
+  const isEventCancelled = event.status === 'cancelled';
+  const isCancelled = registration.status === 'cancelled' || isEventCancelled;
   const eventStartMs = new Date(event.eventDate).getTime();
   const checkinOpenMs = eventStartMs - (30 * 60 * 1000);
   const isGateOpen = now >= checkinOpenMs;
@@ -164,26 +165,42 @@ export function PassCard({ event, registration, className }: PassCardProps) {
         {/* Dynamic Rotating QR or Cancelled / Admitted / Expired Notice */}
         {isCancelled ? (
           <div className="py-2 space-y-4">
-            <div className="py-8 px-4 border-2 border-dashed border-accent/40 bg-accent/5 text-center space-y-3">
-              <div className="text-4xl">🚫</div>
+            <div className="py-6 px-4 border-2 border-dashed border-accent/40 bg-accent/5 text-center space-y-3">
+              <div className="text-3xl">🚫</div>
               <div className="space-y-1">
                 <span className="text-xs font-bold uppercase tracking-widest text-accent block">
-                  RESERVATION CANCELLED & REFUNDED
+                  {isEventCancelled ? 'EVENT CANCELLED BY HOST' : 'RESERVATION CANCELLED & REFUNDED'}
                 </span>
                 <p className="text-[11px] text-muted-text max-w-xs mx-auto">
-                  This pass has been deactivated. {seats} reserved seat(s) were restored to the event capacity.
+                  {isEventCancelled
+                    ? `This event was cancelled. ${seats} ticket seat(s) have been fully refunded.`
+                    : `This pass has been deactivated. ${seats} reserved seat(s) were restored to the event capacity.`}
                 </p>
-                {registration.cancelledAt && (
-                  <p className="text-[10px] text-muted-text/80 font-mono pt-1">
-                    Cancelled: {new Date(registration.cancelledAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                  </p>
+                {(event.cancellationReason || registration.cancelledAt) && (
+                  <div className="pt-2 text-left space-y-1.5 border-t border-accent/20 mt-3">
+                    {event.cancellationReason && (
+                      <div className="p-3 bg-surface border border-accent/40 space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-accent tracking-wider block">
+                          Apology & Reason from Organizer:
+                        </span>
+                        <p className="text-xs text-primary font-serif italic leading-relaxed">
+                          &ldquo;{event.cancellationReason}&rdquo;
+                        </p>
+                      </div>
+                    )}
+                    {registration.cancelledAt && (
+                      <p className="text-[10px] text-muted-text font-mono">
+                        Cancelled: {new Date(registration.cancelledAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="border border-border-rigid bg-surface-high p-3 text-center space-y-1">
               <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-text">
-                REFUND RECEIPT RECORD
+                FULL REFUND RECEIPT RECORD
               </p>
               <p className="text-[9px] text-muted-text">
                 {totalAmount > 0

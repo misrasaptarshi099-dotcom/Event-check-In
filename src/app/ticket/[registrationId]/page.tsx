@@ -94,8 +94,9 @@ export default function TicketPage({ params }: PageParams) {
     ? new Date(displayEvent.eventEndDate).getTime() <= Date.now()
     : false;
 
+  const isEventCancelled = displayEvent.status === 'cancelled';
   const isCheckedIn = displayRegistration.checkedIn === true;
-  const isCancelled = displayRegistration.status === 'cancelled';
+  const isCancelled = displayRegistration.status === 'cancelled' || isEventCancelled;
   const seats = displayRegistration.guestCount || 1;
   const unitPrice = displayRegistration.ticketPrice !== undefined ? displayRegistration.ticketPrice : (displayEvent.ticketPrice || 0);
   const totalAmount = unitPrice * seats;
@@ -167,7 +168,9 @@ export default function TicketPage({ params }: PageParams) {
         </Link>
         <StatusChip
           status={
-            isCancelled
+            isEventCancelled
+              ? 'EVENT CANCELLED BY HOST · FULL REFUND'
+              : isCancelled
               ? 'RESERVATION CANCELLED · REFUNDED'
               : isCheckedIn
               ? 'ADMITTED AT GATE'
@@ -181,6 +184,26 @@ export default function TicketPage({ params }: PageParams) {
 
       {/* Main Pass Viewport */}
       <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 space-y-6">
+        {/* Host Cancellation Apology Alert */}
+        {isEventCancelled && (
+          <div className="w-full max-w-md bg-accent/10 border-2 border-accent p-5 space-y-3 animate-in fade-in">
+            <div className="flex items-center gap-2 text-accent text-xs font-bold uppercase tracking-wider">
+              <span>⚠️</span>
+              <span>Important Message from Event Organizer</span>
+            </div>
+            <h3 className="text-base font-serif italic font-bold text-primary">
+              &ldquo;{displayEvent.name}&rdquo; has been cancelled
+            </h3>
+            <div className="p-3 bg-surface border border-accent/40 text-xs font-serif italic text-primary leading-relaxed">
+              &ldquo;{displayEvent.cancellationReason || 'We sincerely apologize for the inconvenience. The event has been cancelled and full refunds have been processed.'}&rdquo;
+            </div>
+            <div className="pt-1 text-[10px] text-muted-text font-mono flex justify-between border-t border-accent/20">
+              <span>Refund Outflow: <strong className="text-accent">{totalAmount > 0 ? formatCurrency(totalAmount, displayEvent.currency) : 'Free Admission'}</strong></span>
+              <span>Ledger Status: <strong className="text-accent">AUTOMATICALLY REFUNDED</strong></span>
+            </div>
+          </div>
+        )}
+
         <PassCard event={displayEvent} registration={displayRegistration} />
 
         {/* Action Bar */}
@@ -195,7 +218,11 @@ export default function TicketPage({ params }: PageParams) {
           </Button>
 
           {/* Cancellation Control: Only permitted if not admitted, not cancelled, and >= 30m prior to start */}
-          {isCheckedIn ? (
+          {isEventCancelled ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 border border-accent/40 bg-accent/10 text-xs font-semibold text-accent">
+              <span>🚫</span> Event Cancelled by Host · Refund Issued
+            </div>
+          ) : isCheckedIn ? (
             <div className="flex items-center gap-1.5 px-3 py-2 border border-border-rigid bg-surface text-xs font-semibold text-primary">
               <span>✓</span> Ticket Admitted at Gate
             </div>

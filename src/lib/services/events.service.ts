@@ -88,6 +88,9 @@ export async function getAllPublicEvents(limitCount: number = 100): Promise<Even
   return snapshot.docs
     .map((doc) => doc.data() as EventItem)
     .filter((event) => {
+      // Exclude cancelled events
+      if (event.status === 'cancelled') return false;
+
       // Concluded events (past end date or past start date if no end date) are excluded from public discovery
       const endTime = event.eventEndDate
         ? new Date(event.eventEndDate).getTime()
@@ -143,8 +146,99 @@ export async function updateEvent(
 }
 
 /**
- * Deletes an event document.
+ * Cancels an entire event and processes mass cancellation & refunds for all active registrations.
+ *
+ * Unlike deleteEvent which wipes records, cancelEntireEvent preserves the event document in Firestore,
+ * updates event.status to 'cancelled', records the organizer's apology/cancellation note, and cancels
+ * all active attendee registrations with full refund logging.
+ */
+export async function cancelEntireEvent(
+  eventId: string,
+  requester: { uid: string; role?: string },
+  cancellationReason: string
+): Promise<{
+  event: EventItem;
+  registrationsCancelled: number;
+  totalRefunded: number;
+}> {
+  const eventRef = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
+  const eventDoc = await eventRef.get();
+
+  if (!eventDoc.exists) {
+    throw new Error(`Event ${eventId} not found.`);
+  }
+
+  const event = eventDoc.data() as EventItem;
+  if (event.organizerId !== requester.uid && requester.role !== 'organizer') {
+    throw new Error('Unauthorized to cancel this event.');
+  }
+
+  if (event.status === 'cancelled') {
+    throw new Error('This event has already been cancelled.');
+  }
+
+  const nowIso = new Date().toISOString();
+  const cleanReason = cancellationReason.trim() || 'Event cancelled by the organizer.';
+
+  // 1. Fetch all registrations for this event
+  const regSnap = await adminDb
+    .collection('registrations')
+    .where('eventId', '==', eventId)
+    .get();
+
+  let registrationsCancelled = 0;
+  let totalRefunded = 0;
+
+  // Use Firestore batch to update event and active registrations atomically
+  const batch = adminDb.batch();
+
+  // Update event document
+  const updatedEvent: EventItem = {
+    ...event,
+    status: 'cancelled',
+    cancellationReason: cleanReason,
+    cancelledAt: nowIso,
+    cancelledBy: requester.uid,
+    spotsRemaining: 0,
+  };
+
+  batch.update(eventRef, {
+    status: 'cancelled',
+    cancellationReason: cleanReason,
+    cancelledAt: nowIso,
+    cancelledBy: requester.uid,
+    spotsRemaining: 0,
+  });
+
+  for (const doc of regSnap.docs) {
+    const reg = doc.data();
+    if (reg.status === 'active') {
+      const seats = reg.guestCount || 1;
+      const unitPrice = reg.ticketPrice !== undefined ? reg.ticketPrice : (event.ticketPrice || 0);
+      totalRefunded += unitPrice * seats;
+      registrationsCancelled++;
+
+      batch.update(doc.ref, {
+        status: 'cancelled',
+        cancelledAt: nowIso,
+        cancelledBy: requester.uid,
+      });
+    }
+  }
+
+  await batch.commit();
+
+  return {
+    event: updatedEvent,
+    registrationsCancelled,
+    totalRefunded,
+  };
+}
+
+/**
+ * Deletes an event document completely from Firestore.
  */
 export async function deleteEvent(eventId: string): Promise<void> {
   await adminDb.collection(EVENTS_COLLECTION).doc(eventId).delete();
 }
+

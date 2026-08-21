@@ -54,6 +54,14 @@ export async function POST(request: Request) {
     // Validate Event Check-in Window: Scan permitted starting 30 minutes before event start time
     const event = await getEventById(targetEventId);
     if (event) {
+      if (event.status === 'cancelled') {
+        const outcome: ScanOutcome = {
+          status: 'INVALID',
+          message: 'This event has been cancelled by the host. Admission pass is void.',
+        };
+        return NextResponse.json(outcome, { status: 400 });
+      }
+
       const now = Date.now();
       const eventStartMs = new Date(event.eventDate).getTime();
       const checkinOpenMs = eventStartMs - (30 * 60 * 1000);

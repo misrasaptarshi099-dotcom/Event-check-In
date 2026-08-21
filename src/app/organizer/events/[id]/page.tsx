@@ -38,11 +38,16 @@ export default function EventDashboardPage({ params }: PageParams) {
   const [rosterHasMore, setRosterHasMore] = useState(false);
   const [rosterLoading, setRosterLoading] = useState(false);
 
-  // Edit, Delete, and Cancel Registration Modal states
+  // Edit, Delete, Cancel Event, and Cancel Registration Modal states
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [showCancelEventModal, setShowCancelEventModal] = useState(false);
+  const [cancelEventReason, setCancelEventReason] = useState('');
+  const [cancelEventLoading, setCancelEventLoading] = useState(false);
+  const [cancelEventError, setCancelEventError] = useState<string | null>(null);
 
   const [cancellingReg, setCancellingReg] = useState<Registration | null>(null);
   const [cancelRegLoading, setCancelRegLoading] = useState(false);
@@ -170,6 +175,36 @@ export default function EventDashboardPage({ params }: PageParams) {
     } catch (err: any) {
       setDeleteError(err.message || 'Failed to delete event.');
       setDeleteLoading(false);
+    }
+  };
+
+  const handleCancelEntireEvent = async () => {
+    setCancelEventLoading(true);
+    setCancelEventError(null);
+
+    try {
+      const token = await getFreshAuthToken();
+      const res = await fetch(`/api/events/${eventId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ reason: cancelEventReason }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel event.');
+      }
+
+      setShowCancelEventModal(false);
+      fetchData();
+      fetchRoster(1);
+    } catch (err: any) {
+      setCancelEventError(err.message || 'Error cancelling event.');
+    } finally {
+      setCancelEventLoading(false);
     }
   };
 
@@ -417,20 +452,38 @@ export default function EventDashboardPage({ params }: PageParams) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowEditModal(true)}
-            title="Edit event settings, capacity and pricing"
-          >
-            ✏️ Edit Event
-          </Button>
+          {event.status === 'cancelled' ? (
+            <StatusChip status="EVENT CANCELLED · REFUNDED" variant="danger" />
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEditModal(true)}
+                title="Edit event settings, capacity and pricing"
+              >
+                ✏️ Edit Event
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowCancelEventModal(true);
+                  setCancelEventError(null);
+                }}
+                className="text-accent border-accent/40 hover:bg-accent hover:text-surface"
+                title="Cancel event and refund all attendees"
+              >
+                🚫 Cancel Event
+              </Button>
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowDeleteModal(true)}
-            className="text-accent hover:border-accent"
-            title="Delete this event"
+            className="text-muted-text hover:text-accent hover:border-accent"
+            title="Permanently wipe this event and all associated records"
           >
             🗑️ Delete
           </Button>
@@ -467,7 +520,7 @@ export default function EventDashboardPage({ params }: PageParams) {
           <img
             src={event.bannerUrl}
             alt={event.name}
-            className="w-full h-full object-cover object-center opacity-80"
+            className={`w-full h-full object-cover object-center ${event.status === 'cancelled' ? 'grayscale opacity-50' : 'opacity-80'}`}
           />
           <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface/80 to-transparent p-6 flex flex-col justify-center">
             <div className="flex items-center gap-2">
@@ -476,11 +529,17 @@ export default function EventDashboardPage({ params }: PageParams) {
                 {event.eventEndDate ? ` — ${new Date(event.eventEndDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''} · {event.timezone || 'UTC'}
               </p>
               <StatusChip
-                status={stats?.isEventFinished ? 'CONCLUDED' : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'LIVE NOW' : 'UPCOMING')}
-                variant={stats?.isEventFinished ? 'neutral' : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'success' : 'neutral')}
+                status={
+                  event.status === 'cancelled'
+                    ? 'CANCELLED & REFUNDED'
+                    : stats?.isEventFinished
+                    ? 'CONCLUDED'
+                    : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'LIVE NOW' : 'UPCOMING')
+                }
+                variant={event.status === 'cancelled' ? 'danger' : stats?.isEventFinished ? 'neutral' : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'success' : 'neutral')}
               />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-serif italic text-primary font-medium tracking-tight mt-1">
+            <h1 className={`text-2xl sm:text-3xl font-serif italic font-medium tracking-tight mt-1 ${event.status === 'cancelled' ? 'text-muted-text line-through' : 'text-primary'}`}>
               {event.name}
             </h1>
           </div>
@@ -494,14 +553,38 @@ export default function EventDashboardPage({ params }: PageParams) {
                 {event.eventEndDate ? ` — ${new Date(event.eventEndDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''} · {event.timezone || 'UTC'}
               </p>
               <StatusChip
-                status={stats?.isEventFinished ? 'CONCLUDED' : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'LIVE NOW' : 'UPCOMING')}
-                variant={stats?.isEventFinished ? 'neutral' : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'success' : 'neutral')}
+                status={
+                  event.status === 'cancelled'
+                    ? 'CANCELLED & REFUNDED'
+                    : stats?.isEventFinished
+                    ? 'CONCLUDED'
+                    : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'LIVE NOW' : 'UPCOMING')
+                }
+                variant={event.status === 'cancelled' ? 'danger' : stats?.isEventFinished ? 'neutral' : (new Date().getTime() >= new Date(event.eventDate).getTime() ? 'success' : 'neutral')}
               />
             </div>
-            <h1 className="text-2xl font-serif italic text-primary font-medium tracking-tight mt-0.5">
+            <h1 className={`text-2xl font-serif italic font-medium tracking-tight mt-0.5 ${event.status === 'cancelled' ? 'text-muted-text line-through' : 'text-primary'}`}>
               {event.name}
             </h1>
           </div>
+        </div>
+      )}
+
+      {/* Official Cancellation Apology Note Box */}
+      {event.status === 'cancelled' && (
+        <div className="border-b border-border-rigid px-6 md:px-12 py-4 bg-accent/10 border-accent/30 space-y-1">
+          <div className="flex items-center gap-2 text-xs font-bold text-accent uppercase tracking-wider">
+            <span>⚠️</span>
+            <span>Official Cancellation & Apology Notice to Attendees</span>
+          </div>
+          <p className="text-xs text-primary leading-relaxed">
+            &ldquo;{event.cancellationReason || 'This event was cancelled by the host. All attendee reservations have been refunded.'}&rdquo;
+          </p>
+          {event.cancelledAt && (
+            <p className="text-[10px] text-muted-text font-mono pt-0.5">
+              Cancelled on {new Date(event.cancelledAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+          )}
         </div>
       )}
 
@@ -762,6 +845,90 @@ export default function EventDashboardPage({ params }: PageParams) {
                 onClick={handleDeleteEvent}
               >
                 Yes, Delete Event
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Entire Event & Mass Refund Modal */}
+      {showCancelEventModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-mono">
+          <div className="bg-surface border-2 border-border-rigid w-full max-w-lg shadow-2xl p-6 sm:p-8 space-y-6">
+            <div className="space-y-2 border-b border-border-rigid pb-4">
+              <div className="flex items-center gap-2 text-accent text-sm font-bold uppercase tracking-wider">
+                <span>🚫</span>
+                <span>Cancel Event & Issue Mass Refunds</span>
+              </div>
+              <h3 className="text-xl font-serif italic text-primary font-medium tracking-tight">
+                Cancel &ldquo;{event.name}&rdquo;?
+              </h3>
+              <p className="text-xs text-muted-text leading-relaxed">
+                This preserves the event record in the database, locks all gate scanners, cancels all {registrations.filter((r) => r.status !== 'cancelled').length} active attendee passes, and issues full refunds with your apology notice.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Event Statistics Snapshot */}
+              <div className="p-4 bg-surface-low border border-border-rigid space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-text">Active Bookings to Refund:</span>
+                  <span className="font-bold text-primary">
+                    {registrations.filter((r) => r.status !== 'cancelled').length} Passes ({totalBookedSeats} Seats)
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-text">Total Refund Outflow:</span>
+                  <span className="font-bold text-accent">
+                    {finance?.grossRevenue && finance.grossRevenue > 0
+                      ? formatCurrency(finance.grossRevenue, event.currency)
+                      : 'Free Event (0 Financial Outflow)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Apology & Reason Input */}
+              <div className="space-y-1.5 text-left">
+                <label className="text-xs font-bold uppercase tracking-wider text-primary block">
+                  Cancellation Reason & Apology Note for Attendees
+                </label>
+                <textarea
+                  rows={3}
+                  value={cancelEventReason}
+                  onChange={(e) => setCancelEventReason(e.target.value)}
+                  placeholder="e.g. We sincerely apologize, but due to unforeseen venue maintenance, this event has been cancelled. Full refunds have been processed."
+                  className="w-full bg-surface-low border border-border-rigid p-3 text-xs font-mono text-primary placeholder:text-muted-text focus:outline-none focus:border-primary rounded-none resize-none"
+                />
+                <p className="text-[10px] text-muted-text">
+                  This apology note will be displayed prominently on all attendee passes and in the app.
+                </p>
+              </div>
+            </div>
+
+            {cancelEventError && (
+              <div className="border border-accent bg-accent/10 p-2.5 text-xs text-accent">
+                [!] {cancelEventError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => setShowCancelEventModal(false)}
+                disabled={cancelEventLoading}
+              >
+                Keep Event Active
+              </Button>
+              <Button
+                type="button"
+                variant="accent"
+                size="md"
+                loading={cancelEventLoading}
+                onClick={handleCancelEntireEvent}
+              >
+                Confirm Cancellation & Refunds
               </Button>
             </div>
           </div>

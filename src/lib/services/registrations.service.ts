@@ -47,7 +47,11 @@ export async function registerForEvent(
 
     const event = eventSnap.data() as EventItem;
 
-    // 2. Validate event lifecycle: Registration closes once event starts
+    // 2. Validate event lifecycle: Registration closes once event starts or if cancelled
+    if (event.status === 'cancelled') {
+      throw new RegistrationError(400, 'Registration is closed. This event has been cancelled by the host.');
+    }
+
     const nowMs = Date.now();
     const eventStartMs = new Date(event.eventDate).getTime();
     if (nowMs >= eventStartMs) {

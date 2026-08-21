@@ -28,6 +28,10 @@ export interface EventItem {
   currency?: string; // Currency code, defaults to 'USD'
   capacity: number;
   spotsRemaining: number;
+  status?: 'active' | 'cancelled';
+  cancellationReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
   createdAt: string;
 }
 

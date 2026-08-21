@@ -287,7 +287,9 @@ export default function OrganizerDashboard() {
               return (
                 <div
                   key={event.id}
-                  className="border border-border-rigid bg-surface flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow"
+                  className={`border border-border-rigid bg-surface flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow ${
+                    event.status === 'cancelled' ? 'border-accent/40 bg-accent/5' : ''
+                  }`}
                 >
                   {/* Banner Preview or Fallback */}
                   {event.bannerUrl ? (
@@ -296,10 +298,12 @@ export default function OrganizerDashboard() {
                       <img
                         src={event.bannerUrl}
                         alt={event.name}
-                        className="w-full h-full object-cover object-center"
+                        className={`w-full h-full object-cover object-center ${event.status === 'cancelled' ? 'grayscale opacity-50' : ''}`}
                       />
-                      <div className="absolute top-2 right-2">
-                        {event.ticketPrice ? (
+                      <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                        {event.status === 'cancelled' ? (
+                          <StatusChip status="CANCELLED" variant="danger" />
+                        ) : event.ticketPrice ? (
                           <span className="text-[10px] px-2 py-0.5 bg-primary text-surface font-bold">
                             ${event.ticketPrice} {event.currency || 'USD'}
                           </span>
@@ -313,13 +317,17 @@ export default function OrganizerDashboard() {
                       <span className="text-[10px] uppercase tracking-widest text-muted-text">
                         EVENT ID: {event.id.slice(-6)}
                       </span>
-                      {event.ticketPrice ? (
-                        <span className="text-[10px] px-2 py-0.5 bg-primary text-surface font-bold">
-                          ${event.ticketPrice} {event.currency || 'USD'}
-                        </span>
-                      ) : (
-                        <StatusChip status="FREE" variant="success" />
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {event.status === 'cancelled' ? (
+                          <StatusChip status="CANCELLED" variant="danger" />
+                        ) : event.ticketPrice ? (
+                          <span className="text-[10px] px-2 py-0.5 bg-primary text-surface font-bold">
+                            ${event.ticketPrice} {event.currency || 'USD'}
+                          </span>
+                        ) : (
+                          <StatusChip status="FREE" variant="success" />
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -334,7 +342,9 @@ export default function OrganizerDashboard() {
                           year: 'numeric',
                         })}
                       </p>
-                      <h3 className="text-xl font-serif italic text-primary font-medium tracking-tight mt-0.5">
+                      <h3 className={`text-xl font-serif italic font-medium tracking-tight mt-0.5 ${
+                        event.status === 'cancelled' ? 'text-muted-text line-through' : 'text-primary'
+                      }`}>
                         {event.name}
                       </h3>
                       {event.venue && (

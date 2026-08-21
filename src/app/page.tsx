@@ -260,7 +260,8 @@ export default function HomePage() {
                     const eventTitle = reg.event?.name || 'Event Pass';
                     const eventDate = reg.event?.eventDate;
                     const eventVenue = reg.event?.venue;
-                    const isCancelled = reg.status === 'cancelled';
+                    const isEventCancelled = reg.event?.status === 'cancelled';
+                    const isCancelled = reg.status === 'cancelled' || isEventCancelled;
                     const isEventEnded = reg.event?.eventEndDate
                       ? new Date(reg.event.eventEndDate).getTime() <= Date.now()
                       : (reg.event?.eventDate ? new Date(reg.event.eventDate).getTime() <= Date.now() : false);
@@ -279,7 +280,14 @@ export default function HomePage() {
                         {/* Status bar */}
                         <div className="flex items-center justify-between border-b border-border-rigid pb-2.5">
                           <div className="flex items-center gap-1.5">
-                            {isCancelled ? (
+                            {isEventCancelled ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-accent" />
+                                <span className="text-[10px] uppercase font-bold text-accent tracking-widest">
+                                  EVENT CANCELLED · REFUNDED
+                                </span>
+                              </>
+                            ) : isCancelled ? (
                               <>
                                 <span className="w-2 h-2 rounded-full bg-accent" />
                                 <span className="text-[10px] uppercase font-bold text-accent tracking-widest">
@@ -424,9 +432,10 @@ export default function HomePage() {
               <div className="border border-border-rigid divide-y divide-border-rigid">
                 {events.map((event) => {
                   const userReg = myRegistrations.find((r) => r.eventId === event.id);
+                  const isEventCancelled = event.status === 'cancelled';
                   const isStarted = new Date(event.eventDate).getTime() <= Date.now();
                   const isEnded = event.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : false;
-                  const isClosed = isStarted || isEnded;
+                  const isClosed = isEventCancelled || isStarted || isEnded;
 
                   return (
                     <div
@@ -435,7 +444,7 @@ export default function HomePage() {
                     >
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-serif italic text-lg font-medium text-primary">
+                          <span className={`font-serif italic text-lg font-medium ${isEventCancelled ? 'text-muted-text line-through' : 'text-primary'}`}>
                             {event.name}
                           </span>
                           {event.ticketPrice ? (
@@ -448,18 +457,24 @@ export default function HomePage() {
                           {userReg && (
                             <StatusChip
                               status={
-                                userReg.status === 'cancelled'
+                                isEventCancelled || userReg.status === 'cancelled'
                                   ? 'CANCELLED'
                                   : userReg.checkedIn
                                   ? 'ADMITTED'
                                   : 'REGISTERED'
                               }
-                              variant={userReg.status === 'cancelled' ? 'danger' : 'success'}
+                              variant={isEventCancelled || userReg.status === 'cancelled' ? 'danger' : 'success'}
                             />
                           )}
                           {isClosed && (
                             <StatusChip
-                              status={isEnded ? 'CONCLUDED' : 'LIVE NOW · REGISTRATION CLOSED'}
+                              status={
+                                isEventCancelled
+                                  ? 'EVENT CANCELLED'
+                                  : isEnded
+                                  ? 'CONCLUDED'
+                                  : 'LIVE NOW · REGISTRATION CLOSED'
+                              }
                               variant="danger"
                             />
                           )}

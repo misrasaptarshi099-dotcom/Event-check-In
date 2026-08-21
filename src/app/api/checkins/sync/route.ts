@@ -32,6 +32,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
 
+    if (event.status === 'cancelled') {
+      return NextResponse.json({ error: 'This event has been cancelled by the host.' }, { status: 400 });
+    }
+
     requireOwnership(authUser, event.organizerId);
 
     const now = Date.now();

@@ -172,10 +172,11 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
     );
   }
 
+  const isEventCancelled = event?.status === 'cancelled';
   const isSoldOut = event ? event.spotsRemaining <= 0 : false;
   const isStarted = event ? new Date(event.eventDate).getTime() <= Date.now() : false;
   const isEnded = event?.eventEndDate ? new Date(event.eventEndDate).getTime() <= Date.now() : false;
-  const isRegistrationClosed = isStarted || isEnded;
+  const isRegistrationClosed = isEventCancelled || isStarted || isEnded;
 
   const registeredCount = event ? event.capacity - event.spotsRemaining : 0;
   const fillPct = event ? Math.round((registeredCount / event.capacity) * 100) : 0;
@@ -195,13 +196,15 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
         </Link>
         <StatusChip
           status={
-            isRegistrationClosed
+            isEventCancelled
+              ? 'EVENT CANCELLED'
+              : isRegistrationClosed
               ? 'REGISTRATION CLOSED'
               : isSoldOut
               ? 'SOLD OUT'
               : 'SEATS AVAILABLE'
           }
-          variant={isRegistrationClosed || isSoldOut ? 'danger' : 'success'}
+          variant={isEventCancelled || isRegistrationClosed || isSoldOut ? 'danger' : 'success'}
         />
       </header>
 
@@ -269,8 +272,27 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
               </div>
             )}
 
-            {/* CASE 1: Event Started or Ended — Closed */}
-            {isRegistrationClosed ? (
+            {/* CASE 0: Event Cancelled by Host */}
+            {isEventCancelled ? (
+              <div className="border-2 border-accent bg-accent/5 p-6 text-center space-y-4">
+                <StatusChip status="EVENT CANCELLED" variant="danger" />
+                <h3 className="text-xl font-serif italic font-bold text-accent">
+                  This Event Has Been Cancelled
+                </h3>
+                <div className="p-4 bg-surface border border-accent/40 text-xs font-serif italic text-primary leading-relaxed max-w-md mx-auto">
+                  &ldquo;{event?.cancellationReason || 'We sincerely apologize for the inconvenience. This event was cancelled by the host.'}&rdquo;
+                </div>
+                <p className="text-xs text-muted-text max-w-md mx-auto">
+                  All attendee passes have been cancelled and refunded in full. No new registrations are accepted.
+                </p>
+                <Link href="/" className="inline-block pt-2">
+                  <Button variant="secondary" size="sm">
+                    ← Return to Discover Events
+                  </Button>
+                </Link>
+              </div>
+            ) : isRegistrationClosed ? (
+              /* CASE 1: Event Started or Ended — Closed */
               <div className="border-2 border-accent bg-accent/5 p-6 text-center space-y-3">
                 <StatusChip status="REGISTRATION CLOSED" variant="danger" />
                 <h3 className="text-xl font-serif italic font-bold text-accent">
