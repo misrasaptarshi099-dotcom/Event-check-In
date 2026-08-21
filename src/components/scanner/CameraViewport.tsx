@@ -76,7 +76,17 @@ export function CameraViewport({ onScan, isScanning, className }: CameraViewport
           aspectRatio: 1.0,
         };
 
+        let lastFrameScanTime = 0;
+        let lastFramePayload = '';
+
         const scanSuccessCallback = (decodedText: string) => {
+          const now = Date.now();
+          if (now - lastFrameScanTime < 4000 && lastFramePayload === decodedText) {
+            return;
+          }
+          lastFrameScanTime = now;
+          lastFramePayload = decodedText;
+
           if (isMounted) {
             onScan(decodedText);
           }

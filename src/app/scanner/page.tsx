@@ -8,6 +8,7 @@ import { Button, StatusChip, Modal } from '@/components/ui';
 import { enqueueScan, getPendingScans } from '@/lib/offline/db';
 import { drainOfflineQueue, registerAutoSync } from '@/lib/offline/syncManager';
 import { getFreshAuthToken } from '@/lib/firebase/client';
+import { playScanSuccessSound, playScanDuplicateSound, playScanErrorSound } from '@/lib/utils/audio';
 import type { ScanOutcome, OfflineQueuedScan } from '@/types';
 
 interface SyncFeedback {
@@ -79,9 +80,26 @@ export default function ScannerPage() {
   const outcomeRef = React.useRef(outcome);
   outcomeRef.current = outcome;
 
+  const isProcessingRef = React.useRef(false);
+  const lastScanTimeRef = React.useRef(0);
+  const lastScannedPayloadRef = React.useRef('');
+
   const handleScan = React.useCallback(async (rawDecodedText: string) => {
-    // Prevent scanning while an outcome modal is active
+    // 1. Prevent scanning while an outcome modal is active
     if (outcomeRef.current) return;
+
+    // 2. In-flight guard: prevent duplicate scans while a request is processing
+    if (isProcessingRef.current) return;
+
+    // 3. Rate-limiting: do not scan the same payload within 5 seconds
+    const nowMs = Date.now();
+    if (nowMs - lastScanTimeRef.current < 5000 && lastScannedPayloadRef.current === rawDecodedText) {
+      return;
+    }
+
+    isProcessingRef.current = true;
+    lastScanTimeRef.current = nowMs;
+    lastScannedPayloadRef.current = rawDecodedText;
 
     try {
       let regId = '';
@@ -102,7 +120,7 @@ export default function ScannerPage() {
       }
 
       const clientScanId = crypto.randomUUID();
-      const now = new Date().toISOString();
+      const nowIso = new Date().toISOString();
 
       // If online: submit directly to real-time endpoint
       if (isOnline) {
@@ -141,6 +159,15 @@ export default function ScannerPage() {
           result = data as ScanOutcome;
         }
 
+        // Play audio feedback
+        if (result.status === 'CONFIRMED') {
+          playScanSuccessSound();
+        } else if (result.status === 'DUPLICATE') {
+          playScanDuplicateSound();
+        } else {
+          playScanErrorSound();
+        }
+
         setOutcome(result);
         setScanHistory((prev) => [result, ...prev.slice(0, 20)]);
       } else {
@@ -152,7 +179,7 @@ export default function ScannerPage() {
           qrToken: regId,
           otp: otp || '',
           stationId,
-          clientScannedAt: now,
+          clientScannedAt: nowIso,
           attendeeName: 'Queued Offline Scan',
           syncStatus: 'pending',
         };
@@ -168,14 +195,18 @@ export default function ScannerPage() {
           isOffline: true,
         };
 
+        playScanSuccessSound();
         setOutcome(provisionalOutcome);
         setScanHistory((prev) => [provisionalOutcome, ...prev.slice(0, 20)]);
       }
     } catch (err: any) {
+      playScanErrorSound();
       setOutcome({
         status: 'INVALID',
         message: err.message || 'Scan verification failed.',
       });
+    } finally {
+      isProcessingRef.current = false;
     }
   }, [isOnline, stationId]);
 
