@@ -230,7 +230,7 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
               <div className="absolute top-3 right-3">
                 {event.ticketPrice ? (
                   <span className="text-xs px-2.5 py-1 bg-primary text-surface font-bold">
-                    ${event.ticketPrice} {event.currency || 'USD'}
+                    {formatCurrency(event.ticketPrice, event.currency)}
                   </span>
                 ) : (
                   <StatusChip status="FREE ADMISSION" variant="success" />

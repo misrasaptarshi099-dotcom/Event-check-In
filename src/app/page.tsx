@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, getFreshAuthToken } from '@/lib/firebase/client';
 import { Button, StatusChip, CardNav } from '@/components/ui';
 import { clientCache } from '@/lib/cache/clientCache';
+import { formatCurrency } from '@/lib/utils/format';
 import type { EventItem, Registration } from '@/types';
 
 type EnrichedRegistration = Registration & { event?: EventItem };
@@ -429,7 +430,7 @@ export default function HomePage() {
                           </span>
                           {event.ticketPrice ? (
                             <span className="text-[10px] px-1.5 py-0.5 border border-border-rigid bg-surface-high font-bold">
-                              ${event.ticketPrice} {event.currency || 'USD'}
+                              {formatCurrency(event.ticketPrice, event.currency)}
                             </span>
                           ) : (
                             <StatusChip status="FREE ADMISSION" variant="success" />

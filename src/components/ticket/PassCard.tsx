@@ -147,7 +147,7 @@ export function PassCard({ event, registration, className }: PassCardProps) {
             <span className={clsx("text-[10px] block font-bold", isCancelled ? "text-accent" : "text-muted-text")}>
               {isCancelled ? (
                 totalAmount > 0
-                  ? `₹${totalAmount.toLocaleString()} Refunded`
+                  ? `${formatCurrency(totalAmount, event.currency)} Refunded`
                   : 'Reservation Cancelled'
               ) : (
                 totalAmount > 0

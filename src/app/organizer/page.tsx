@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth, getFreshAuthToken } from '@/lib/firebase/client';
 import { Button, Input, StatusChip, ProgressBar, CardNav } from '@/components/ui';
 import { EditEventModal } from '@/components/dashboard/EditEventModal';
+import { formatCurrency } from '@/lib/utils/format';
 import type { EventItem } from '@/types';
 
 interface OrganizerRecord {
@@ -286,7 +287,7 @@ export default function OrganizerDashboard() {
                           <StatusChip status="CANCELLED" variant="danger" />
                         ) : event.ticketPrice ? (
                           <span className="text-[10px] px-2 py-0.5 bg-primary text-surface font-bold">
-                            ${event.ticketPrice} {event.currency || 'USD'}
+                            {formatCurrency(event.ticketPrice, event.currency)}
                           </span>
                         ) : (
                           <StatusChip status="FREE" variant="success" />
@@ -303,7 +304,7 @@ export default function OrganizerDashboard() {
                           <StatusChip status="CANCELLED" variant="danger" />
                         ) : event.ticketPrice ? (
                           <span className="text-[10px] px-2 py-0.5 bg-primary text-surface font-bold">
-                            ${event.ticketPrice} {event.currency || 'USD'}
+                            {formatCurrency(event.ticketPrice, event.currency)}
                           </span>
                         ) : (
                           <StatusChip status="FREE" variant="success" />
@@ -346,7 +347,7 @@ export default function OrganizerDashboard() {
                       {event.ticketPrice ? (
                         <div className="flex items-center justify-between text-[11px] pt-1">
                           <span className="text-muted-text uppercase">Gross Revenue:</span>
-                          <span className="font-bold text-accent">${estRevenue.toLocaleString()}</span>
+                          <span className="font-bold text-accent">{formatCurrency(estRevenue, event.currency)}</span>
                         </div>
                       ) : null}
                     </div>
