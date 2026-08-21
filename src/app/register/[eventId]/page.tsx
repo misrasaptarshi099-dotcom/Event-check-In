@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider, getFreshAuthToken } from '@/lib/firebase/client';
+import { clientCache } from '@/lib/cache/clientCache';
 import { Button, Input, StatusChip, ProgressBar } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils/format';
 import type { EventItem } from '@/types';
@@ -138,8 +139,14 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
         throw new Error('Registration completed without a pass. Please try again.');
       }
 
+      if (event && data.registration) {
+        clientCache.setPassBundle(data.registration.id, {
+          registration: data.registration as any,
+          event,
+        });
+      }
       localStorage.setItem(`vouch_ticket_${data.registration.id}`, JSON.stringify(data.registration));
-      router.push(`/ticket/${data.registration.id}?eventId=${eventId}`);
+      router.push(`/ticket/${data.registration.id}`);
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
     } finally {

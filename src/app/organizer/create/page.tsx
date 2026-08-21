@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button, Input, ImageUpload, StatusChip } from '@/components/ui';
+import { Button, Input, ImageUpload, StatusChip, CardNav } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils/format';
 import { convertLocalToUtcIso } from '@/lib/utils/timezone';
 import { getFreshAuthToken } from '@/lib/firebase/client';
@@ -15,14 +15,30 @@ export default function CreateEventPage() {
   const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
-    const role = localStorage.getItem('vouch_user_role');
-    const token = localStorage.getItem('vouch_auth_token');
+    async function verifyOrganizer() {
+      const token = await getFreshAuthToken();
+      if (!token) {
+        window.location.href = '/auth/login';
+        return;
+      }
 
-    if (!token || role !== 'organizer') {
-      window.location.href = '/auth/login';
-      return;
+      try {
+        const meRes = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const meData = await meRes.json();
+        if (meData.role !== 'organizer') {
+          window.location.href = '/';
+          return;
+        }
+        localStorage.setItem('vouch_user_role', 'organizer');
+        setChecking(false);
+      } catch {
+        window.location.href = '/';
+      }
     }
-    setChecking(false);
+
+    void verifyOrganizer();
   }, []);
 
   // Form State
@@ -95,41 +111,18 @@ export default function CreateEventPage() {
 
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">
-      {/* Top Header */}
-      <header className="border-b border-border-rigid px-6 md:px-12 flex items-center justify-between h-16 bg-surface">
-        <div className="flex items-center gap-3">
-          <Link href="/organizer" className="flex items-center gap-2">
-            <span className="text-sm font-mono font-bold tracking-[0.25em] text-primary">
-              VOUCH
-            </span>
-            <span className="text-[10px] font-mono text-muted-text">/</span>
-          </Link>
-          <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
-            Event Creation Studio
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link href="/organizer">
-            <Button variant="outline" size="sm">
-              Cancel & Return
-            </Button>
-          </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              localStorage.removeItem('vouch_user_role');
-              localStorage.removeItem('vouch_user_uid');
-              localStorage.removeItem('vouch_user_email');
-              localStorage.removeItem('vouch_auth_token');
-              window.location.href = '/';
-            }}
-          >
-            Logout
-          </Button>
-        </div>
-      </header>
+      {/* Top Header Card Nav */}
+      <CardNav
+        currentSection="Event Studio"
+        role="organizer"
+        onLogout={() => {
+          localStorage.removeItem('vouch_user_role');
+          localStorage.removeItem('vouch_user_uid');
+          localStorage.removeItem('vouch_user_email');
+          localStorage.removeItem('vouch_auth_token');
+          window.location.href = '/';
+        }}
+      />
 
       {/* Main Studio Grid */}
       <main className="flex-1 p-6 md:p-12 max-w-7xl w-full mx-auto">

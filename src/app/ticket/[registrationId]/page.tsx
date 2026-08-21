@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { PassCard } from '@/components/ticket/PassCard';
 import { Button, StatusChip } from '@/components/ui';
 import { getFreshAuthToken } from '@/lib/firebase/client';
+import { clientCache } from '@/lib/cache/clientCache';
 import { formatCurrency } from '@/lib/utils/format';
 import type { EventItem, Registration } from '@/types';
 
@@ -15,80 +15,91 @@ interface PageParams {
 
 export default function TicketPage({ params }: PageParams) {
   const { registrationId } = use(params);
-  const searchParams = useSearchParams();
-  const eventIdFromQuery = searchParams.get('eventId');
 
-  const [event, setEvent] = useState<EventItem | null>(null);
-  const [registration, setRegistration] = useState<Registration | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Initialize synchronously from client cache to achieve 0ms frame-1 instant render
+  const initialCached = typeof window !== 'undefined' ? clientCache.getPassBundle(registrationId) : null;
+
+  const [event, setEvent] = useState<EventItem | null>(initialCached?.event || null);
+  const [registration, setRegistration] = useState<Registration | null>(initialCached?.registration || null);
+  const [loading, setLoading] = useState(!initialCached);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 1. Check local cached registration for fast paint
-    const cached = localStorage.getItem(`vouch_ticket_${registrationId}`);
-    if (cached) {
+    let isMounted = true;
+
+    async function loadTicket() {
       try {
-        const reg = JSON.parse(cached) as Registration;
-        setRegistration(reg);
-      } catch {
-        // Fallback
+        const token = await getFreshAuthToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`/api/registrations/${registrationId}`, { headers });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Unable to retrieve ticket pass.');
+        }
+
+        if (isMounted) {
+          if (data.registration) setRegistration(data.registration);
+          if (data.event) setEvent(data.event);
+
+          if (data.registration && data.event) {
+            clientCache.setPassBundle(registrationId, {
+              registration: data.registration,
+              event: data.event,
+            });
+          }
+        }
+      } catch (err: any) {
+        if (isMounted && !registration) {
+          setFetchError(err.message || 'Ticket not found or access denied.');
+        }
+      } finally {
+        if (isMounted) setLoading(false);
       }
     }
 
-    // 2. Authoritatively fetch live registration & event state from API
-    fetch(`/api/registrations/${registrationId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Ticket not found');
-        return res.json();
-      })
-      .then((data) => {
-        if (data.registration) {
-          setRegistration(data.registration);
-          localStorage.setItem(`vouch_ticket_${registrationId}`, JSON.stringify(data.registration));
-        }
-        if (data.event) {
-          setEvent(data.event);
-        }
-      })
-      .catch((err) => {
-        console.warn('Live ticket sync fallback:', err);
-        // Fallback to event query if registration endpoint failed
-        if (eventIdFromQuery) {
-          fetch(`/api/events/${eventIdFromQuery}`)
-            .then((res) => res.json())
-            .then((data) => {
-              if (data.event) setEvent(data.event);
-            })
-            .catch(() => {});
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [registrationId, eventIdFromQuery]);
+    loadTicket();
 
-  const displayRegistration: Registration = registration || {
-    id: registrationId,
-    eventId: event?.id || 'demo_event',
-    attendeeId: 'att_guest',
-    attendeeName: 'Registered Guest',
-    attendeeEmail: 'guest@vouch.event',
-    qrToken: registrationId,
-    totpSecret: 'JBSWY3DPEHPK3PXP', // Base32 fallback
-    status: 'active',
-    guestCount: 1,
-    createdAt: new Date().toISOString(),
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [registrationId]);
 
-  const displayEvent: EventItem = event || {
-    id: eventIdFromQuery || 'demo_event',
-    organizerId: 'org_admin',
-    name: 'VOUCH Dynamic Access Pass',
-    eventDate: new Date().toISOString(),
-    capacity: 100,
-    spotsRemaining: 50,
-    createdAt: new Date().toISOString(),
-  };
+  if (fetchError && !registration) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center font-mono bg-surface text-primary p-6 space-y-4">
+        <div className="border border-accent bg-accent/10 p-6 text-sm text-accent max-w-md text-center space-y-2">
+          <p className="font-bold uppercase tracking-wider">[!] Security Notice</p>
+          <p className="text-xs text-primary">{fetchError}</p>
+        </div>
+        <Link href="/">
+          <Button variant="secondary" size="md">Return to My Passes</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (loading && (!registration || !event)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center font-mono bg-surface text-primary p-6 space-y-4 animate-in fade-in duration-150">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent animate-spin" />
+        <div className="border border-border-rigid p-6 text-center space-y-1 bg-surface-low shadow-sm max-w-sm w-full">
+          <p className="text-xs font-bold uppercase tracking-widest text-primary">RETRIEVING PASS</p>
+          <p className="text-[10px] text-muted-text">Verifying cryptographic admission credentials...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Authoritative real data is guaranteed loaded here (no dummy placeholder flash)
+  const displayRegistration = registration!;
+  const displayEvent = event!;
 
   const isEventEnded = displayEvent.eventEndDate
     ? new Date(displayEvent.eventEndDate).getTime() <= Date.now()

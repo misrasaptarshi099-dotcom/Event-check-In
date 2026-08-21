@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "db:clean": "tsx scripts/db/clean-database.ts",
     "test:capacity-race": "tsx scripts/load-test/registration-race.ts",
     "test:checkin-race": "tsx scripts/load-test/checkin-race.ts",
     "test:rbac": "tsx scripts/load-test/rbac-test.ts",

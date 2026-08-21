@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { clsx } from 'clsx';
 import { DynamicQrCode } from './DynamicQrCode';
 import { StatusChip } from '../ui/StatusChip';
@@ -14,6 +14,7 @@ export interface PassCardProps {
 }
 
 export function PassCard({ event, registration, className }: PassCardProps) {
+  const [showQrZoom, setShowQrZoom] = useState(false);
   const now = Date.now();
   const isEventCancelled = event.status === 'cancelled';
   const isCancelled = registration.status === 'cancelled' || isEventCancelled;
@@ -40,6 +41,8 @@ export function PassCard({ event, registration, className }: PassCardProps) {
   const seats = registration.guestCount || 1;
   const unitPrice = registration.ticketPrice !== undefined ? registration.ticketPrice : (event.ticketPrice || 0);
   const totalAmount = unitPrice * seats;
+
+  const displayPassCode = registration.passCode || `VCH-${(registration.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || '8X9K'}-${(registration.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase() || '2M4P'}`;
 
   return (
     <div
@@ -136,10 +139,10 @@ export function PassCard({ event, registration, className }: PassCardProps) {
 
           <div className="text-right">
             <span className="text-[9px] uppercase tracking-widest text-muted-text block">
-              RESERVATION · {seats} SEAT{seats > 1 ? 'S' : ''}
+              PASS REFERENCE · {seats} SEAT{seats > 1 ? 'S' : ''}
             </span>
-            <span className="font-mono text-[10px] font-bold text-primary block truncate">
-              {registration.id}
+            <span className="font-mono text-[11px] font-bold text-primary block tracking-wider truncate">
+              {displayPassCode}
             </span>
             <span className={clsx("text-[10px] block font-bold", isCancelled ? "text-accent" : "text-muted-text")}>
               {isCancelled ? (
@@ -156,10 +159,10 @@ export function PassCard({ event, registration, className }: PassCardProps) {
         </div>
 
         {/* Perforation Divider */}
-        <div className="relative py-2 flex items-center justify-center">
+        <div className="relative py-2 flex items-center justify-center -mx-6">
           <div className="w-full border-b-2 border-dashed border-border-rigid" />
-          <div className="absolute -left-9 w-6 h-6 rounded-full bg-surface-highest border border-border-rigid" />
-          <div className="absolute -right-9 w-6 h-6 rounded-full bg-surface-highest border border-border-rigid" />
+          <div className="absolute left-0 -translate-x-1/2 w-5 h-5 rounded-full bg-surface-low border border-border-rigid" />
+          <div className="absolute right-0 translate-x-1/2 w-5 h-5 rounded-full bg-surface-low border border-border-rigid" />
         </div>
 
         {/* Dynamic Rotating QR or Cancelled / Admitted / Expired Notice */}
@@ -264,12 +267,19 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           </div>
         ) : (
           <>
-            <div className="py-2">
+            <div
+              className="py-2 cursor-pointer group transition-transform active:scale-[0.98]"
+              onClick={() => setShowQrZoom(true)}
+              title="Tap to expand QR code full-screen for high-contrast gate scanning"
+            >
               <DynamicQrCode
                 registrationId={registration.id}
                 eventId={event.id}
                 totpSecret={registration.totpSecret}
               />
+              <p className="text-[10px] text-center text-muted-text mt-1.5 group-hover:text-primary transition-colors flex items-center justify-center gap-1">
+                <span>🔍</span> Tap to expand full screen for scanner
+              </p>
             </div>
 
             {/* Security Anti-Screenshot Banner */}
@@ -298,8 +308,56 @@ export function PassCard({ event, registration, className }: PassCardProps) {
             ? 'VOUCH OS // ARCHIVED'
             : 'VOUCH OS // RFC 6238'}
         </span>
-        <span>ID: {registration.id.slice(-8)}</span>
+        <span className="font-mono font-bold text-primary">{displayPassCode}</span>
       </div>
+
+      {/* Full-Screen QR Zoom Modal for High-Speed Gate Scanning */}
+      {showQrZoom && !isCancelled && !registration.checkedIn && !isEnded && (
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-in fade-in duration-150 font-mono"
+          onClick={() => setShowQrZoom(false)}
+        >
+          <div
+            className="bg-white p-6 rounded-none border-4 border-black max-w-sm w-full text-center space-y-4 shadow-2xl text-black animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b-2 border-black pb-2 text-xs font-bold uppercase tracking-wider">
+              <span className="truncate pr-2">{event.name}</span>
+              <button
+                onClick={() => setShowQrZoom(false)}
+                className="w-7 h-7 bg-black text-white flex items-center justify-center text-sm font-bold hover:bg-neutral-800 flex-shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-2 bg-white flex justify-center">
+              <DynamicQrCode
+                registrationId={registration.id}
+                eventId={event.id}
+                totpSecret={registration.totpSecret}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-mono font-bold tracking-widest uppercase text-black">
+                {displayPassCode}
+              </p>
+              <p className="text-[10px] text-neutral-600 font-mono">
+                Present this high-contrast dynamic code directly to the gate scanner.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowQrZoom(false)}
+              className="w-full py-2.5 bg-black text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800"
+            >
+              Done Scanning
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

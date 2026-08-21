@@ -80,8 +80,9 @@ export async function registerForEvent(
       spotsRemaining: event.spotsRemaining - guestCount,
     });
 
-    // 5. Generate TOTP secret and create registration record
+    // 5. Generate TOTP secret and passCode
     const totpSecret = generateTotpSecret();
+    const passCode = generatePassCode();
     const now = new Date().toISOString();
 
     const registration: Registration = {
@@ -90,6 +91,7 @@ export async function registerForEvent(
       attendeeId,
       attendeeName,
       attendeeEmail,
+      passCode,
       qrToken: regId,
       totpSecret,
       status: 'active',
@@ -104,13 +106,39 @@ export async function registerForEvent(
   });
 }
 
+function generatePassCode(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let p1 = '';
+  let p2 = '';
+  for (let i = 0; i < 4; i++) p1 += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 4; i++) p2 += chars[Math.floor(Math.random() * chars.length)];
+  return `VCH-${p1}-${p2}`;
+}
+
 /**
- * Retrieves a registration by ID, enriching with gate check-in status.
+ * Retrieves a registration by ID or PassCode, enriching with gate check-in status.
  */
-export async function getRegistrationById(regId: string): Promise<Registration | null> {
-  const doc = await adminDb.collection(REGISTRATIONS_COLLECTION).doc(regId).get();
+export async function getRegistrationById(idOrPassCode: string): Promise<Registration | null> {
+  let doc = await adminDb.collection(REGISTRATIONS_COLLECTION).doc(idOrPassCode).get();
+
+  if (!doc.exists && idOrPassCode.toUpperCase().startsWith('VCH-')) {
+    const snap = await adminDb
+      .collection(REGISTRATIONS_COLLECTION)
+      .where('passCode', '==', idOrPassCode.toUpperCase())
+      .limit(1)
+      .get();
+    if (!snap.empty) {
+      doc = snap.docs[0];
+    }
+  }
+
   if (!doc.exists) return null;
   const reg = doc.data() as Registration;
+
+  if (!reg.passCode) {
+    const cleanHash = (reg.id || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    reg.passCode = `VCH-${cleanHash.slice(0, 4) || '8X9K'}-${cleanHash.slice(-4) || '2M4P'}`;
+  }
 
   // Check gate admission status
   try {
@@ -118,7 +146,7 @@ export async function getRegistrationById(regId: string): Promise<Registration |
       .collection('events')
       .doc(reg.eventId)
       .collection('checkins')
-      .doc(regId)
+      .doc(reg.id)
       .get();
 
     if (checkinDoc.exists) {
@@ -127,7 +155,7 @@ export async function getRegistrationById(regId: string): Promise<Registration |
       reg.checkedInAt = checkinData?.checkedInAt || checkinData?.createdAt;
     }
   } catch (err) {
-    console.error(`Failed to verify check-in status for registration ${regId}:`, err);
+    console.error(`Failed to verify check-in status for registration ${reg.id}:`, err);
   }
 
   return reg;

@@ -2,22 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: 'PP Editorial New';
-  src: url('https://db.onlinewebfonts.com/t/20e29b1e5a59334ccb33658db4edb549.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'PP Editorial New';
-  src: url('https://db.onlinewebfonts.com/t/7b8c2df6a02b1156e5223e7f457ff2aa.woff2') format('woff2');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
 :root {
   --surface: #FBF9F4;
   --surface-dim: #DCDAD5;

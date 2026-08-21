@@ -438,7 +438,7 @@ export default function EventDashboardPage({ params }: PageParams) {
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">
       {/* Top Header */}
-      <header className="border-b border-border-rigid px-6 md:px-12 flex items-center justify-between h-16 bg-surface">
+      <header className="border-b border-border-rigid px-4 sm:px-6 md:px-12 flex flex-col sm:flex-row sm:items-center justify-between min-h-16 py-3 sm:py-0 gap-3 bg-surface">
         <div className="flex items-center gap-3">
           <Link href="/organizer" className="flex items-center gap-2">
             <span className="text-sm font-mono font-bold tracking-[0.25em] text-primary">
@@ -451,7 +451,7 @@ export default function EventDashboardPage({ params }: PageParams) {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {event.status === 'cancelled' ? (
             <StatusChip status="EVENT CANCELLED · REFUNDED" variant="danger" />
           ) : (
@@ -462,7 +462,7 @@ export default function EventDashboardPage({ params }: PageParams) {
                 onClick={() => setShowEditModal(true)}
                 title="Edit event settings, capacity and pricing"
               >
-                ✏️ Edit Event
+                ✏️ Edit
               </Button>
               <Button
                 variant="outline"
@@ -489,12 +489,12 @@ export default function EventDashboardPage({ params }: PageParams) {
           </Button>
           <Link href="/scanner">
             <Button variant="outline" size="sm">
-              📷 Open Scanner
+              📷 Scanner
             </Button>
           </Link>
           <Link href={`/register/${event.id}`} target="_blank">
             <Button variant="secondary" size="sm">
-              🔗 Registration Pass
+              🔗 Registration
             </Button>
           </Link>
           <Button
@@ -589,17 +589,17 @@ export default function EventDashboardPage({ params }: PageParams) {
       )}
 
       {/* Tabs Navigation Bar */}
-      <div className="border-b border-border-rigid bg-surface">
-        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="px-6 md:px-12" />
+      <div className="border-b border-border-rigid bg-surface overflow-x-auto no-scrollbar">
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="px-4 sm:px-6 md:px-12 min-w-max" />
       </div>
 
       {/* Main Content Viewport */}
-      <main className="flex-1 p-6 md:px-12 md:py-8 max-w-7xl w-full mx-auto space-y-6">
+      <main className="flex-1 p-4 sm:p-6 md:px-12 md:py-8 max-w-7xl w-full mx-auto space-y-6">
         {/* 1. OPERATIONS TAB */}
         {activeTab === 'operations' && stats && (
           <div id="panel-operations" role="tabpanel" aria-labelledby="tab-operations" className="space-y-6 animate-in fade-in duration-150">
-            {/* Live KPI Metric Tiles */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Live KPI Metric Tiles (2x2 on mobile, 4 columns on desktop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <MetricCard
                 label="Total Registered"
                 value={`${stats.registeredCount} / ${stats.capacity}`}
@@ -732,12 +732,102 @@ export default function EventDashboardPage({ params }: PageParams) {
                 <span className="text-xs text-muted-text uppercase tracking-widest">Querying attendee roster ledger...</span>
               </div>
             ) : (
-              <Table
-                columns={rosterColumns}
-                data={registrations}
-                keyExtractor={(r) => r.id}
-                emptyMessage="No attendees matched your search/filter criteria."
-              />
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden md:block">
+                  <Table
+                    columns={rosterColumns}
+                    data={registrations}
+                    keyExtractor={(r) => r.id}
+                    emptyMessage="No attendees matched your search/filter criteria."
+                  />
+                </div>
+
+                {/* Mobile Responsive Cards View */}
+                <div className="block md:hidden space-y-3">
+                  {registrations.length === 0 ? (
+                    <div className="p-8 border border-border-rigid text-center text-xs text-muted-text bg-surface">
+                      No attendees matched your search/filter criteria.
+                    </div>
+                  ) : (
+                    registrations.map((r) => {
+                      const isCheckedIn = r.checkedIn === true;
+                      const isCancelled = r.status === 'cancelled';
+                      const seats = r.guestCount || 1;
+                      const unitPrice = r.ticketPrice !== undefined ? r.ticketPrice : (event?.ticketPrice || 0);
+                      const total = unitPrice * seats;
+                      const displayCode = r.passCode || `VCH-${r.id.slice(0, 4).toUpperCase()}-${r.id.slice(-4).toUpperCase()}`;
+
+                      return (
+                        <div
+                          key={r.id}
+                          className={`border p-4 bg-surface space-y-3 font-mono text-xs ${
+                            isCancelled ? 'border-accent/40 bg-accent/5' : isCheckedIn ? 'border-primary/50' : 'border-border-rigid'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between border-b border-border-rigid pb-2">
+                            <div>
+                              <p className="font-bold text-primary text-sm">{r.attendeeName}</p>
+                              <p className="text-[10px] text-muted-text">{r.attendeeEmail}</p>
+                            </div>
+                            <StatusChip
+                              status={
+                                isCancelled
+                                  ? 'CANCELLED'
+                                  : isCheckedIn
+                                  ? 'ADMITTED'
+                                  : 'CONFIRMED'
+                              }
+                              variant={isCancelled ? 'danger' : isCheckedIn ? 'success' : 'neutral'}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-[10px] text-muted-text">
+                            <div>
+                              <span className="block uppercase">Seats:</span>
+                              <span className="font-bold text-primary">{seats} Seat(s)</span>
+                            </div>
+                            <div>
+                              <span className="block uppercase">Paid / Value:</span>
+                              <span className="font-bold text-primary">{total > 0 ? formatCurrency(total, event?.currency) : 'Free'}</span>
+                            </div>
+                            <div>
+                              <span className="block uppercase">Pass Ref:</span>
+                              <span className="font-bold text-primary font-mono">{displayCode}</span>
+                            </div>
+                            <div>
+                              <span className="block uppercase">Gate Status:</span>
+                              <span className="font-bold text-primary">{isCheckedIn ? 'Checked In' : isCancelled ? 'Refunded' : 'Unscanned'}</span>
+                            </div>
+                          </div>
+
+                          {/* Mobile Actions */}
+                          <div className="pt-2 border-t border-border-rigid flex items-center justify-end gap-2">
+                            <Link href={`/ticket/${r.id}`} target="_blank">
+                              <Button variant="outline" size="sm" className="text-[10px]">
+                                🎟️ Pass
+                              </Button>
+                            </Link>
+                            {!isCancelled && !isCheckedIn && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setCancellingReg(r);
+                                  setCancelRegError(null);
+                                }}
+                                className="text-accent border-accent/40 text-[10px]"
+                              >
+                                🚫 Cancel & Refund
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
             )}
 
             {/* Pagination Controls */}
@@ -806,8 +896,8 @@ export default function EventDashboardPage({ params }: PageParams) {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-mono">
-          <div className="bg-surface border-2 border-border-rigid w-full max-w-md shadow-2xl p-6 sm:p-8 space-y-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150 font-mono">
+          <div className="bg-surface border-t-2 sm:border-2 border-border-rigid w-full max-w-md shadow-2xl p-6 sm:p-8 space-y-6 rounded-t-2xl sm:rounded-none max-h-[90vh] overflow-y-auto">
             <div className="space-y-2 border-b border-border-rigid pb-4">
               <div className="flex items-center gap-2 text-accent text-sm font-bold uppercase tracking-wider">
                 <span>⚠️</span>
@@ -853,8 +943,8 @@ export default function EventDashboardPage({ params }: PageParams) {
 
       {/* Cancel Entire Event & Mass Refund Modal */}
       {showCancelEventModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-mono">
-          <div className="bg-surface border-2 border-border-rigid w-full max-w-lg shadow-2xl p-6 sm:p-8 space-y-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150 font-mono">
+          <div className="bg-surface border-t-2 sm:border-2 border-border-rigid w-full max-w-lg shadow-2xl p-6 sm:p-8 space-y-6 rounded-t-2xl sm:rounded-none max-h-[90vh] overflow-y-auto">
             <div className="space-y-2 border-b border-border-rigid pb-4">
               <div className="flex items-center gap-2 text-accent text-sm font-bold uppercase tracking-wider">
                 <span>🚫</span>
@@ -937,8 +1027,8 @@ export default function EventDashboardPage({ params }: PageParams) {
 
       {/* Cancel Registration & Refund Modal */}
       {cancellingReg && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-mono">
-          <div className="bg-surface border-2 border-border-rigid w-full max-w-md shadow-2xl p-6 sm:p-8 space-y-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150 font-mono">
+          <div className="bg-surface border-t-2 sm:border-2 border-border-rigid w-full max-w-md shadow-2xl p-6 sm:p-8 space-y-6 rounded-t-2xl sm:rounded-none max-h-[90vh] overflow-y-auto">
             <div className="space-y-2 border-b border-border-rigid pb-4">
               <div className="flex items-center gap-2 text-accent text-sm font-bold uppercase tracking-wider">
                 <span>🚫</span>

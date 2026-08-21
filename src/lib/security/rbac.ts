@@ -1,5 +1,6 @@
 import { adminAuth } from '@/lib/firebase/admin';
 import { isAuthorizedOrganizer, SEED_ORGANIZER_EMAILS } from '@/lib/services/organizers.service';
+import { syncUserAccount } from '@/lib/services/users.service';
 import type { UserRole } from '@/types';
 
 export { SEED_ORGANIZER_EMAILS };
@@ -48,15 +49,23 @@ export async function verifyAuthToken(authHeader: string | null): Promise<Authen
     throw new AuthError(401, error.message || 'Invalid or expired authentication token.');
   }
 
-  const email = decoded.email || '';
+  const email = (decoded.email || '').trim().toLowerCase();
+  const displayName = decoded.name || (email ? email.split('@')[0] : 'Guest Attendee');
+  const photoURL = decoded.picture || null;
 
-  // Check if email is an authorized organizer (seed or database)
-  const hasOrganizerAccess = await isAuthorizedOrganizer(email);
-  let role: UserRole = hasOrganizerAccess ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
-
-  // If user is an authorized organizer but custom claim not set yet, set it asynchronously
-  if (hasOrganizerAccess && decoded.role !== 'organizer') {
-    adminAuth.setCustomUserClaims(decoded.uid, { role: 'organizer' }).catch(() => {});
+  // Authoritatively sync user in 3NF `users` table
+  let role: UserRole = 'attendee';
+  try {
+    const account = await syncUserAccount({
+      uid: decoded.uid,
+      email,
+      displayName,
+      photoURL,
+    });
+    role = account.role;
+  } catch {
+    const hasOrganizerAccess = await isAuthorizedOrganizer(email);
+    role = hasOrganizerAccess ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
   }
 
   return {

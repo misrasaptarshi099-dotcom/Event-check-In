@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, getFreshAuthToken } from '@/lib/firebase/client';
-import { Button, StatusChip } from '@/components/ui';
+import { Button, StatusChip, CardNav } from '@/components/ui';
+import { clientCache } from '@/lib/cache/clientCache';
 import type { EventItem, Registration } from '@/types';
 
 type EnrichedRegistration = Registration & { event?: EventItem };
@@ -12,9 +13,9 @@ type EnrichedRegistration = Registration & { event?: EventItem };
 export default function HomePage() {
   const [role, setRole] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>(() => clientCache.getPublicEvents() || []);
   const [myRegistrations, setMyRegistrations] = useState<EnrichedRegistration[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!clientCache.getPublicEvents());
   const [passesLoading, setPassesLoading] = useState(false);
 
   const fetchPasses = async (email: string) => {
@@ -28,6 +29,12 @@ export default function HomePage() {
       const data = await res.json();
       if (data.registrations) {
         setMyRegistrations(data.registrations);
+        // Seed client cache for instant 0ms pass opening
+        for (const reg of data.registrations) {
+          if (reg.event) {
+            clientCache.setPassBundle(reg.id, { registration: reg, event: reg.event });
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to fetch attendee passes:', err);
@@ -43,6 +50,7 @@ export default function HomePage() {
       .then((data) => {
         if (data.events) {
           setEvents(data.events);
+          clientCache.setPublicEvents(data.events);
         } else if (data.error) {
           console.error('API Error:', data.error);
         }
@@ -64,15 +72,35 @@ export default function HomePage() {
       fetchPasses(savedEmail);
     }
 
-    // Listen to Firebase Auth state to keep token fresh
+    // Listen to Firebase Auth state and authoritatively sync role & user account
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user && user.email) {
         setUserEmail(user.email);
         localStorage.setItem('vouch_user_email', user.email);
         localStorage.setItem('vouch_user_uid', user.uid);
+        localStorage.setItem('vouch_user_name', user.displayName || '');
         const token = await user.getIdToken();
         localStorage.setItem('vouch_auth_token', token);
+
+        // Fetch live database role & 3NF user account
+        try {
+          const res = await fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          if (data.role) {
+            setRole(data.role);
+            localStorage.setItem('vouch_user_role', data.role);
+          }
+        } catch (e) {
+          console.warn('Live role sync fallback:', e);
+        }
+
         fetchPasses(user.email);
+      } else {
+        setUserEmail(null);
+        setRole(null);
+        setMyRegistrations([]);
       }
     });
 
@@ -93,62 +121,14 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">
-      {/* Top rigid border */}
-      <div className="border-b border-border-rigid" />
-
-      {/* Header */}
-      <header className="border-b border-border-rigid px-6 md:px-12 flex items-center justify-between h-16 bg-surface">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-mono font-bold tracking-[0.25em] text-primary">
-            VOUCH
-          </span>
-          <span className="text-[10px] font-mono text-muted-text">/</span>
-          <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-muted-text">
-            Event Check-In OS
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {myRegistrations.length > 0 && (
-            <a href="#my-passes">
-              <Button variant="accent" size="sm" className="text-xs">
-                🎟️ My Passes ({myRegistrations.length})
-              </Button>
-            </a>
-          )}
-          {role === 'organizer' && (
-            <>
-              <Link href="/scanner">
-                <Button variant="outline" size="sm">
-                  📷 Fast Gate Scanner
-                </Button>
-              </Link>
-              <Link href="/organizer">
-                <Button variant="secondary" size="sm">
-                  Organizer Portal
-                </Button>
-              </Link>
-            </>
-          )}
-          {role && userEmail && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 border border-border-rigid bg-surface-high text-[10px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-              <span className="font-semibold uppercase">{role}:</span>
-              <span className="text-muted-text truncate max-w-[160px]">{userEmail}</span>
-            </div>
-          )}
-          {role ? (
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
-              Logout
-            </Button>
-          ) : (
-            <Link href="/auth/login">
-              <Button variant="primary" size="sm">
-                Login / Sign In
-              </Button>
-            </Link>
-          )}
-        </div>
-      </header>
+      {/* Navigation Card Nav */}
+      <CardNav
+        currentSection="Event Check-In OS"
+        role={role}
+        userEmail={userEmail}
+        passesCount={myRegistrations.length}
+        onLogout={handleLogout}
+      />
 
       {/* Main Content Hero */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 md:px-12 py-12">
@@ -352,7 +332,7 @@ export default function HomePage() {
                         {/* CTA button */}
                         <div className="pt-2 border-t border-border-rigid">
                           {isCancelled ? (
-                            <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
+                            <Link href={`/ticket/${reg.id}`} className="block w-full">
                               <Button
                                 variant="outline"
                                 size="md"
@@ -363,7 +343,7 @@ export default function HomePage() {
                               </Button>
                             </Link>
                           ) : reg.checkedIn ? (
-                            <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
+                            <Link href={`/ticket/${reg.id}`} className="block w-full">
                               <Button
                                 variant="outline"
                                 size="md"
@@ -378,7 +358,7 @@ export default function HomePage() {
                               <span>🔒 Event Concluded · Pass Expired</span>
                             </div>
                           ) : (
-                            <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
+                            <Link href={`/ticket/${reg.id}`} className="block w-full">
                               <Button
                                 variant="accent"
                                 size="md"
@@ -491,7 +471,7 @@ export default function HomePage() {
 
                       <div className="flex items-center gap-2">
                         {userReg ? (
-                          <Link href={`/ticket/${userReg.id}?eventId=${event.id}`}>
+                          <Link href={`/ticket/${userReg.id}`}>
                             <Button
                               variant={userReg.checkedIn ? 'outline' : 'accent'}
                               size="sm"
