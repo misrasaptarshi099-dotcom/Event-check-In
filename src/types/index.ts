@@ -19,10 +19,19 @@ export interface EventItem {
   organizerId: string;
   name: string;
   description?: string;
-  eventDate: string; // ISO date string
+  eventDate: string; // ISO start date/time string
+  eventEndDate?: string; // ISO end date/time string
   timezone?: string; // IANA timezone (e.g. 'America/New_York'), defaults to 'UTC'
+  venue?: string; // Location or venue name
+  bannerUrl?: string; // Banner image URL or base64 data string
+  ticketPrice?: number; // Price per ticket in currency units (e.g. 0 for free, 50, 150)
+  currency?: string; // Currency code, defaults to 'USD'
   capacity: number;
   spotsRemaining: number;
+  status?: 'active' | 'cancelled';
+  cancellationReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
   createdAt: string;
 }
 
@@ -35,6 +44,12 @@ export interface Registration {
   qrToken: string;
   totpSecret: string; // Base32 RFC 6238 secret (delivered once to attendee)
   status: RegistrationStatus;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  guestCount: number; // Number of seats reserved (1–5, includes the registrant)
+  ticketPrice?: number;
+  checkedIn?: boolean;
+  checkedInAt?: string;
   createdAt: string;
 }
 
@@ -74,15 +89,46 @@ export interface CheckinTimeBucket {
 export interface StatsBundle {
   eventId: string;
   eventName: string;
+  eventDate?: string;
+  eventEndDate?: string;
+  isEventFinished: boolean;
   capacity: number;
   spotsRemaining: number;
   registeredCount: number;
   checkedInCount: number;
   noShowCount: number;
-  noShowPct: number;
+  noShowPct: number | null; // null if event is ongoing or in future
   checkinsBy15Min: CheckinTimeBucket[];
   peakCheckinBucket: string;
   peakCheckinCount: number;
+  computedAt: string;
+}
+
+export interface TransactionEntry {
+  id: string;
+  registrationId: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  amount: number;
+  currency: string;
+  status: 'completed' | 'refunded';
+  createdAt: string;
+}
+
+export interface FinanceBundle {
+  eventId: string;
+  eventName: string;
+  ticketPrice: number;
+  currency: string;
+  grossRevenue: number;
+  netRevenue: number;
+  refundedAmount: number;
+  paidTicketsCount: number;
+  unpaidTicketsCount: number;
+  averageOrderValue: number;
+  projectedRevenue: number; // Potential gross revenue at 100% capacity
+  occupancyFinancialRate: number; // Percentage of projected revenue realized (0-100)
+  recentTransactions: TransactionEntry[];
   computedAt: string;
 }
 

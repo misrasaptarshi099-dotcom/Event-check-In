@@ -5,11 +5,12 @@ import { twMerge } from 'tailwind-merge';
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg' | 'xl';
-  isLoading?: boolean;
+  loading?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', isLoading = false, children, disabled, ...props }, ref) => {
+  ({ className, variant = 'primary', size = 'md', loading = false, children, disabled, ...props }, ref) => {
+    const isBusy = Boolean(loading);
     const sizeClasses = {
       sm: 'h-10 px-4 text-xs font-mono tracking-wider',
       md: 'h-12 px-6 text-xs font-mono tracking-widest',
@@ -33,7 +34,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        disabled={disabled || isLoading}
+        disabled={disabled || isBusy}
+        aria-busy={isBusy}
         className={twMerge(
           clsx(
             'relative inline-flex items-center justify-center uppercase font-medium select-none rounded-none focus:outline-none focus:ring-1 focus:ring-border-rigid disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none cursor-pointer',
@@ -44,9 +46,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {...props}
       >
-        {isLoading ? (
+        {isBusy ? (
           <span className="inline-flex items-center gap-2">
-            <span className="w-3 h-3 border border-current border-t-transparent animate-spin" />
+            <span className="w-3 h-3 border border-current animate-spin" />
             <span>PROCESSING...</span>
           </span>
         ) : (

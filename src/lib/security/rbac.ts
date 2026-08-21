@@ -1,5 +1,22 @@
 import { adminAuth } from '@/lib/firebase/admin';
+import { isAuthorizedOrganizer, SEED_ORGANIZER_EMAILS } from '@/lib/services/organizers.service';
 import type { UserRole } from '@/types';
+
+export { SEED_ORGANIZER_EMAILS };
+
+/**
+ * Synchronously checks if an email matches seed organizer list.
+ */
+export function isOrganizerEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  const envList = (process.env.ORGANIZER_EMAILS || process.env.NEXT_PUBLIC_ORGANIZER_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  return SEED_ORGANIZER_EMAILS.includes(normalized) || envList.includes(normalized);
+}
 
 /**
  * Server-side RBAC enforcement for API route handlers.
@@ -7,7 +24,6 @@ import type { UserRole } from '@/types';
  * Verifies the Firebase ID token from the Authorization header
  * and checks the user's custom claim role against the required role(s).
  */
-
 export interface AuthenticatedUser {
   uid: string;
   email: string;
@@ -16,25 +32,38 @@ export interface AuthenticatedUser {
 
 /**
  * Verifies a Firebase ID token and extracts the authenticated user.
- * Throws if the token is invalid, expired, or missing.
+ * Automatically resolves organizer role for authorized emails.
  */
 export async function verifyAuthToken(authHeader: string | null): Promise<AuthenticatedUser> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new AuthError(401, 'Missing or malformed Authorization header.');
   }
 
-  const idToken = authHeader.replace('Bearer ', '');
+  const token = authHeader.replace('Bearer ', '').trim();
 
+  let decoded;
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken, true);
-    return {
-      uid: decoded.uid,
-      email: decoded.email || '',
-      role: (decoded.role as UserRole) || 'attendee',
-    };
-  } catch {
-    throw new AuthError(401, 'Invalid or expired authentication token.');
+    decoded = await adminAuth.verifyIdToken(token);
+  } catch (error: any) {
+    throw new AuthError(401, error.message || 'Invalid or expired authentication token.');
   }
+
+  const email = decoded.email || '';
+
+  // Check if email is an authorized organizer (seed or database)
+  const hasOrganizerAccess = await isAuthorizedOrganizer(email);
+  let role: UserRole = hasOrganizerAccess ? 'organizer' : ((decoded.role as UserRole) || 'attendee');
+
+  // If user is an authorized organizer but custom claim not set yet, set it asynchronously
+  if (hasOrganizerAccess && decoded.role !== 'organizer') {
+    adminAuth.setCustomUserClaims(decoded.uid, { role: 'organizer' }).catch(() => {});
+  }
+
+  return {
+    uid: decoded.uid,
+    email,
+    role,
+  };
 }
 
 /**

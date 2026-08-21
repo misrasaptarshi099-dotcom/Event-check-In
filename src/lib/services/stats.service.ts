@@ -1,5 +1,5 @@
 import { adminDb } from '@/lib/firebase/admin';
-import type { StatsBundle, CheckinTimeBucket, Checkin, EventItem } from '@/types';
+import type { StatsBundle, CheckinTimeBucket, Checkin, EventItem, Registration } from '@/types';
 
 /**
  * Computes a live StatsBundle for a given event.
@@ -20,27 +20,52 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   }
   const event = eventDoc.data() as EventItem;
 
-  // Fetch registration count
+  // Fetch active registrations and sum total booked seats
   const registrationsSnap = await adminDb
     .collection('registrations')
     .where('eventId', '==', eventId)
     .where('status', '==', 'active')
-    .count()
     .get();
-  const registeredCount = registrationsSnap.data().count;
 
-  // Fetch all check-ins
+  const regGuestMap = new Map<string, number>();
+  let registeredCount = 0;
+  for (const doc of registrationsSnap.docs) {
+    const data = doc.data() as Registration;
+    const guests = data.guestCount || 1;
+    regGuestMap.set(doc.id, guests);
+    registeredCount += guests;
+  }
+
+  // Fetch all check-ins and sum admitted seats
   const checkinsSnap = await adminDb
     .collection('events')
     .doc(eventId)
     .collection('checkins')
     .get();
   const checkins = checkinsSnap.docs.map((doc) => doc.data() as Checkin);
-  const checkedInCount = checkins.length;
+  let checkedInCount = 0;
+  for (const checkin of checkins) {
+    const seats = regGuestMap.get(checkin.registrationId);
+    if (seats !== undefined) {
+      checkedInCount += seats;
+    }
+  }
 
-  // Compute no-show metrics (clamped to 0 to handle cancelled registrations)
-  const noShowCount = Math.max(0, registeredCount - checkedInCount);
-  const noShowPct = registeredCount > 0 ? Math.round((noShowCount / registeredCount) * 100) : 0;
+  // Determine if the event has concluded
+  const now = Date.now();
+  const eventStartTime = new Date(event.eventDate).getTime();
+  // If eventEndDate is explicitly set, use that; otherwise default to 3 hours after start time
+  const eventEndTime = event.eventEndDate
+    ? new Date(event.eventEndDate).getTime()
+    : eventStartTime + (3 * 60 * 60 * 1000);
+
+  const isEventFinished = now >= eventEndTime;
+
+  // Compute no-show metrics (only calculated after event concludes)
+  const noShowCount = isEventFinished ? Math.max(0, registeredCount - checkedInCount) : 0;
+  const noShowPct = isEventFinished
+    ? (registeredCount > 0 ? Math.round((noShowCount / registeredCount) * 100) : 0)
+    : null;
 
   // Resolve event timezone for stable bucketing across deployments
   const eventTimezone = event.timezone || 'UTC';
@@ -49,11 +74,11 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   const bucketMap = new Map<string, number>();
   for (const checkin of checkins) {
     const date = new Date(checkin.checkedInAt);
-    // Use Intl.DateTimeFormat for timezone-aware hour/minute extraction
+    // Use Intl.DateTimeFormat with explicit h23 cycle for timezone-aware hour/minute extraction
     const parts = new Intl.DateTimeFormat('en-US', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
+      hourCycle: 'h23',
       timeZone: eventTimezone,
     }).formatToParts(date);
 
@@ -63,7 +88,8 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
       .toString()
       .padStart(2, '0');
     const bucketKey = `${hourPart}:${minuteBucket}`;
-    bucketMap.set(bucketKey, (bucketMap.get(bucketKey) || 0) + 1);
+    const checkinSeats = regGuestMap.get(checkin.registrationId) || 1;
+    bucketMap.set(bucketKey, (bucketMap.get(bucketKey) || 0) + checkinSeats);
   }
 
   const checkinsBy15Min: CheckinTimeBucket[] = Array.from(bucketMap.entries())
@@ -83,6 +109,9 @@ export async function computeEventStats(eventId: string): Promise<StatsBundle> {
   return {
     eventId,
     eventName: event.name,
+    eventDate: event.eventDate,
+    eventEndDate: event.eventEndDate,
+    isEventFinished,
     capacity: event.capacity,
     spotsRemaining: event.spotsRemaining,
     registeredCount,
