@@ -160,8 +160,8 @@ export default function EventDashboardPage({ params }: PageParams) {
         <div className="flex items-center gap-2">
           <span className="font-semibold text-primary">{r.attendeeName}</span>
           {(r.guestCount ?? 1) > 1 && (
-            <span className="text-[9px] font-bold bg-primary text-surface px-1.5 py-0.5 uppercase tracking-wider">
-              +{r.guestCount - 1} {r.guestCount === 2 ? 'Guest' : 'Guests'}
+            <span className="text-[10px] px-1 py-0.5 border border-border-rigid bg-surface-high text-muted-text">
+              +{r.guestCount! - 1} Guests
             </span>
           )}
         </div>
@@ -170,43 +170,41 @@ export default function EventDashboardPage({ params }: PageParams) {
     {
       key: 'attendeeEmail',
       header: 'Email',
-      render: (r) => <span className="text-[11px] text-muted-text">{r.attendeeEmail}</span>,
+      render: (r) => <span className="text-xs text-muted-text">{r.attendeeEmail}</span>,
     },
     {
-      key: 'guestCount',
-      header: 'Seats',
-      align: 'center',
+      key: 'status',
+      header: 'Lifecycle Status',
+      render: (r) => {
+        let statusText = 'CONFIRMED';
+        let variant: 'neutral' | 'success' | 'danger' | 'warning' = 'neutral';
+
+        if (r.status === 'cancelled') {
+          statusText = 'CANCELLED';
+          variant = 'danger';
+        } else if (r.checkedIn) {
+          statusText = isEventConcluded ? 'ATTENDED' : 'CHECKED IN';
+          variant = 'success';
+        } else if (isEventConcluded) {
+          statusText = 'NO SHOW';
+          variant = 'danger';
+        }
+
+        return <StatusChip status={statusText} variant={variant} />;
+      },
+    },
+    {
+      key: 'checkedInAt',
+      header: 'Admitted At',
       render: (r) => (
-        <span className="font-bold text-xs text-primary">
-          {r.guestCount ?? 1}
+        <span className="text-[10px] text-muted-text font-mono">
+          {r.checkedInAt ? new Date(r.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
         </span>
       ),
     },
     {
-      key: 'status',
-      header: 'Status',
-      align: 'center',
-      render: (r) => {
-        if (r.status === 'cancelled') {
-          return <StatusChip status="CANCELLED" variant="danger" />;
-        }
-        if (r.checkedIn) {
-          return (
-            <StatusChip
-              status={isEventConcluded ? 'ATTENDED' : 'CHECKED IN'}
-              variant="success"
-            />
-          );
-        }
-        if (isEventConcluded) {
-          return <StatusChip status="NO SHOW" variant="danger" />;
-        }
-        return <StatusChip status="CONFIRMED" variant="neutral" />;
-      },
-    },
-    {
       key: 'createdAt',
-      header: 'Registered At',
+      header: 'Registered',
       align: 'right',
       render: (r) => (
         <span className="text-[10px] text-muted-text">
@@ -216,11 +214,17 @@ export default function EventDashboardPage({ params }: PageParams) {
     },
   ];
 
-  if (loading) {
+  if (loading || (!event && !error)) {
     return (
-      <div className="min-h-screen flex items-center justify-center font-mono bg-surface text-primary p-6">
-        <div className="border border-border-rigid p-8 text-center text-xs animate-pulse">
-          Connecting to live Firestore operations hub...
+      <div className="min-h-screen flex flex-col items-center justify-center font-mono bg-surface text-primary p-6 space-y-4 animate-in fade-in duration-200">
+        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="border border-border-rigid p-6 text-center space-y-1 bg-surface-low shadow-sm max-w-sm w-full">
+          <p className="text-xs font-bold uppercase tracking-widest text-primary">
+            INITIALIZING OPERATIONS HUB
+          </p>
+          <p className="text-[10px] text-muted-text">
+            Connecting to live event telemetry and roster...
+          </p>
         </div>
       </div>
     );
