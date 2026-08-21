@@ -60,24 +60,40 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
           <div className="absolute top-3 right-3">
             <StatusChip
-              status={isCancelled ? 'CANCELLED · REFUNDED' : (isEnded ? 'EXPIRED' : 'OFFICIAL PASS')}
-              variant={isCancelled || isEnded ? 'danger' : 'neutral'}
+              status={
+                isCancelled
+                  ? 'CANCELLED · REFUNDED'
+                  : registration.checkedIn
+                  ? 'ADMITTED · VERIFIED'
+                  : isEnded
+                  ? 'EXPIRED'
+                  : 'OFFICIAL PASS'
+              }
+              variant={isCancelled || isEnded ? 'danger' : registration.checkedIn ? 'success' : 'neutral'}
             />
           </div>
         </div>
       ) : (
         <div className={clsx(
           "h-16 border-b border-border-rigid flex items-center justify-between px-6",
-          isCancelled ? "bg-accent/15" : "bg-primary"
+          isCancelled ? "bg-accent/15" : registration.checkedIn ? "bg-surface-low border-b-2 border-primary" : "bg-primary"
         )}>
           <span className={clsx(
             "text-xs uppercase tracking-[0.25em] font-bold",
-            isCancelled ? "text-accent" : "text-surface"
+            isCancelled ? "text-accent" : registration.checkedIn ? "text-primary" : "text-surface"
           )}>
-            {isCancelled ? 'CANCELLED RESERVATION' : 'VOUCH VERIFIED PASS'}
+            {isCancelled ? 'CANCELLED RESERVATION' : registration.checkedIn ? 'ADMITTED PASS' : 'VOUCH VERIFIED PASS'}
           </span>
           <StatusChip
-            status={isCancelled ? 'CANCELLED · REFUNDED' : (isEnded ? 'EXPIRED' : 'ACTIVE')}
+            status={
+              isCancelled
+                ? 'CANCELLED · REFUNDED'
+                : registration.checkedIn
+                ? 'ADMITTED'
+                : isEnded
+                ? 'EXPIRED'
+                : 'ACTIVE'
+            }
             variant={isCancelled || isEnded ? 'danger' : 'success'}
           />
         </div>
@@ -145,7 +161,7 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           <div className="absolute -right-9 w-6 h-6 rounded-full bg-surface-highest border border-border-rigid" />
         </div>
 
-        {/* Dynamic Rotating QR or Cancelled / Expired Notice */}
+        {/* Dynamic Rotating QR or Cancelled / Admitted / Expired Notice */}
         {isCancelled ? (
           <div className="py-2 space-y-4">
             <div className="py-8 px-4 border-2 border-dashed border-accent/40 bg-accent/5 text-center space-y-3">
@@ -173,6 +189,36 @@ export function PassCard({ event, registration, className }: PassCardProps) {
                 {totalAmount > 0
                   ? `Full refund of ${formatCurrency(totalAmount, event.currency)} logged and returned.`
                   : 'Free reservation seat returned to the organizer inventory.'}
+              </p>
+            </div>
+          </div>
+        ) : registration.checkedIn ? (
+          <div className="py-2 space-y-4">
+            <div className="py-8 px-4 border-2 border-border-rigid bg-surface-low text-center space-y-3 shadow-inner">
+              <div className="w-12 h-12 mx-auto border-2 border-primary bg-primary text-surface flex items-center justify-center text-xl font-bold">
+                ✓
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-widest text-primary block">
+                  ADMITTED AT GATE
+                </span>
+                <p className="text-[11px] text-muted-text max-w-xs mx-auto">
+                  Admission pass validated and entry granted. Single-use dynamic QR token has been consumed and locked.
+                </p>
+                {registration.checkedInAt && (
+                  <p className="text-[10px] text-muted-text font-mono pt-1">
+                    Admitted: {new Date(registration.checkedInAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="border border-border-rigid bg-surface-high p-3 text-center space-y-1">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-primary">
+                OFFICIAL ADMISSION RECORD
+              </p>
+              <p className="text-[9px] text-muted-text">
+                This pass has already been admitted at the gate. It cannot be cancelled, transferred, or scanned again.
               </p>
             </div>
           </div>
@@ -226,7 +272,15 @@ export function PassCard({ event, registration, className }: PassCardProps) {
 
       {/* Footer Strip */}
       <div className="border-t border-border-rigid px-6 py-3 bg-surface-high flex items-center justify-between text-[9px] text-muted-text uppercase tracking-wider">
-        <span>{isCancelled ? 'VOUCH OS // VOID' : (isEnded ? 'VOUCH OS // ARCHIVED' : 'VOUCH OS // RFC 6238')}</span>
+        <span>
+          {isCancelled
+            ? 'VOUCH OS // VOID'
+            : registration.checkedIn
+            ? 'VOUCH OS // ADMITTED'
+            : isEnded
+            ? 'VOUCH OS // ARCHIVED'
+            : 'VOUCH OS // RFC 6238'}
+        </span>
         <span>ID: {registration.id.slice(-8)}</span>
       </div>
     </div>

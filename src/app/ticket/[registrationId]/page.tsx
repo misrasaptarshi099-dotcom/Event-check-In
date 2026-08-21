@@ -26,38 +26,45 @@ export default function TicketPage({ params }: PageParams) {
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 1. Try local cached registration first
+    // 1. Check local cached registration for fast paint
     const cached = localStorage.getItem(`vouch_ticket_${registrationId}`);
     if (cached) {
       try {
         const reg = JSON.parse(cached) as Registration;
         setRegistration(reg);
-
-        // Fetch parent event details
-        fetch(`/api/events/${reg.eventId || eventIdFromQuery}`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.event) setEvent(data.event);
-          })
-          .catch((err) => console.error('Failed to load event details:', err))
-          .finally(() => setLoading(false));
-        return;
       } catch {
-        // Fallback to fetch
+        // Fallback
       }
     }
 
-    // 2. Otherwise fetch registration / event from API
-    if (eventIdFromQuery) {
-      fetch(`/api/events/${eventIdFromQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.event) setEvent(data.event);
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    // 2. Authoritatively fetch live registration & event state from API
+    fetch(`/api/registrations/${registrationId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Ticket not found');
+        return res.json();
+      })
+      .then((data) => {
+        if (data.registration) {
+          setRegistration(data.registration);
+          localStorage.setItem(`vouch_ticket_${registrationId}`, JSON.stringify(data.registration));
+        }
+        if (data.event) {
+          setEvent(data.event);
+        }
+      })
+      .catch((err) => {
+        console.warn('Live ticket sync fallback:', err);
+        // Fallback to event query if registration endpoint failed
+        if (eventIdFromQuery) {
+          fetch(`/api/events/${eventIdFromQuery}`)
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.event) setEvent(data.event);
+            })
+            .catch(() => {});
+        }
+      })
+      .finally(() => setLoading(false));
   }, [registrationId, eventIdFromQuery]);
 
   const displayRegistration: Registration = registration || {
@@ -83,14 +90,21 @@ export default function TicketPage({ params }: PageParams) {
     createdAt: new Date().toISOString(),
   };
 
-  const isEventEnded = event?.eventEndDate
-    ? new Date(event.eventEndDate).getTime() <= Date.now()
+  const isEventEnded = displayEvent.eventEndDate
+    ? new Date(displayEvent.eventEndDate).getTime() <= Date.now()
     : false;
 
+  const isCheckedIn = displayRegistration.checkedIn === true;
   const isCancelled = displayRegistration.status === 'cancelled';
   const seats = displayRegistration.guestCount || 1;
-  const unitPrice = displayRegistration.ticketPrice !== undefined ? displayRegistration.ticketPrice : (event?.ticketPrice || 0);
+  const unitPrice = displayRegistration.ticketPrice !== undefined ? displayRegistration.ticketPrice : (displayEvent.ticketPrice || 0);
   const totalAmount = unitPrice * seats;
+
+  // 30-Minute cancellation cutoff policy
+  const eventStartMs = new Date(displayEvent.eventDate).getTime();
+  const cancellationDeadlineMs = eventStartMs - (30 * 60 * 1000);
+  const isCancellationWindowClosed = Date.now() >= cancellationDeadlineMs;
+  const canCancel = !isCheckedIn && !isCancelled && !isCancellationWindowClosed && !isEventEnded;
 
   const handleCancelTicket = async () => {
     setCancelling(true);
@@ -120,13 +134,13 @@ export default function TicketPage({ params }: PageParams) {
       localStorage.setItem(`vouch_ticket_${registrationId}`, JSON.stringify(updatedReg));
       setShowCancelModal(false);
     } catch (err: any) {
-      setCancelError(err.message || 'Error cancelling ticket.');
+      setCancelError(err.message || 'Cancellation failed. Please try again.');
     } finally {
       setCancelling(false);
     }
   };
 
-  if (loading) {
+  if (loading && !registration) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center font-mono bg-surface text-primary p-6 space-y-4 animate-in fade-in duration-200">
         <div className="w-8 h-8 border-2 border-primary animate-spin" />
@@ -155,7 +169,11 @@ export default function TicketPage({ params }: PageParams) {
           status={
             isCancelled
               ? 'RESERVATION CANCELLED · REFUNDED'
-              : (isEventEnded ? 'EVENT CONCLUDED · EXPIRED' : 'VERIFIED ENCRYPTED TOKEN')
+              : isCheckedIn
+              ? 'ADMITTED AT GATE'
+              : isEventEnded
+              ? 'EVENT CONCLUDED · EXPIRED'
+              : 'VERIFIED ENCRYPTED TOKEN'
           }
           variant={isCancelled || isEventEnded ? 'danger' : 'success'}
         />
@@ -176,7 +194,27 @@ export default function TicketPage({ params }: PageParams) {
             🖨️ Print Pass
           </Button>
 
-          {!isCancelled && !isEventEnded && (
+          {/* Cancellation Control: Only permitted if not admitted, not cancelled, and >= 30m prior to start */}
+          {isCheckedIn ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 border border-border-rigid bg-surface text-xs font-semibold text-primary">
+              <span>✓</span> Ticket Admitted at Gate
+            </div>
+          ) : isCancelled ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 border border-accent/40 bg-accent/10 text-xs font-semibold text-accent">
+              <span>🚫</span> Reservation Cancelled
+            </div>
+          ) : isEventEnded ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 border border-border-rigid/40 bg-surface-high text-xs text-muted-text">
+              <span>🎟️</span> Event Concluded
+            </div>
+          ) : isCancellationWindowClosed ? (
+            <div
+              className="flex items-center gap-1.5 px-3 py-2 border border-border-rigid/40 bg-surface-high text-xs text-muted-text"
+              title="Cancellation closes 30 minutes before event start"
+            >
+              <span>⏳</span> Cancellation Closed (Past 30m Cutoff)
+            </div>
+          ) : canCancel ? (
             <Button
               variant="outline"
               size="sm"
@@ -185,7 +223,7 @@ export default function TicketPage({ params }: PageParams) {
             >
               🚫 Cancel Reservation & Refund
             </Button>
-          )}
+          ) : null}
 
           <Link href="/">
             <Button variant="outline" size="sm" className="text-xs">

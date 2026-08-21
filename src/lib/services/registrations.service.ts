@@ -101,12 +101,32 @@ export async function registerForEvent(
 }
 
 /**
- * Retrieves a registration by ID.
+ * Retrieves a registration by ID, enriching with gate check-in status.
  */
 export async function getRegistrationById(regId: string): Promise<Registration | null> {
   const doc = await adminDb.collection(REGISTRATIONS_COLLECTION).doc(regId).get();
   if (!doc.exists) return null;
-  return doc.data() as Registration;
+  const reg = doc.data() as Registration;
+
+  // Check gate admission status
+  try {
+    const checkinDoc = await adminDb
+      .collection('events')
+      .doc(reg.eventId)
+      .collection('checkins')
+      .doc(regId)
+      .get();
+
+    if (checkinDoc.exists) {
+      const checkinData = checkinDoc.data();
+      reg.checkedIn = true;
+      reg.checkedInAt = checkinData?.checkedInAt || checkinData?.createdAt;
+    }
+  } catch (err) {
+    console.error(`Failed to verify check-in status for registration ${regId}:`, err);
+  }
+
+  return reg;
 }
 
 /**
@@ -117,8 +137,9 @@ export async function getRegistrationById(regId: string): Promise<Registration |
  * 2. Read the event document.
  * 3. Verify requester permissions (must be the attendee themselves or event organizer).
  * 4. Verify attendee has not already been scanned / checked in at the gate.
- * 5. Atomically mark registration as 'cancelled' with cancelledAt and cancelledBy.
- * 6. Atomically restore seats to the event: `spotsRemaining = Math.min(capacity, spotsRemaining + guestCount)`.
+ * 5. Verify cancellation deadline (attendees can only cancel up to 30 minutes before event start).
+ * 6. Atomically mark registration as 'cancelled' with cancelledAt and cancelledBy.
+ * 7. Atomically restore seats to the event: `spotsRemaining = Math.min(capacity, spotsRemaining + guestCount)`.
  */
 export async function cancelRegistration(
   registrationId: string,
@@ -155,11 +176,21 @@ export async function cancelRegistration(
       throw new RegistrationError(403, 'You are not authorized to cancel this ticket reservation.');
     }
 
-    // Check if attendee was already checked in
+    // Check if attendee was already checked in at the gate
     const checkinRef = adminDb.collection('events').doc(reg.eventId).collection('checkins').doc(registrationId);
     const checkinSnap = await transaction.get(checkinRef);
-    if (checkinSnap.exists) {
+    if (checkinSnap.exists || reg.checkedIn) {
       throw new RegistrationError(400, 'Cannot cancel a ticket that has already been admitted at the gate.');
+    }
+
+    // 30-Minute Cancellation Deadline Policy (Applies to Attendees)
+    const eventStartMs = new Date(event.eventDate).getTime();
+    const cancellationDeadlineMs = eventStartMs - (30 * 60 * 1000);
+    if (Date.now() >= cancellationDeadlineMs && !isOrganizer) {
+      throw new RegistrationError(
+        400,
+        'Ticket cancellation window has closed. Reservations can only be cancelled up to 30 minutes prior to event start.'
+      );
     }
 
     const seatsToRestore = reg.guestCount || 1;
@@ -310,7 +341,7 @@ export async function getRegistrationsByEvent(eventId: string): Promise<Registra
 }
 
 /**
- * Retrieves all registrations for a specific attendee.
+ * Retrieves all registrations for a specific attendee, enriching with gate check-in status.
  */
 export async function getRegistrationsByAttendee(attendeeId: string): Promise<Registration[]> {
   const snapshot = await adminDb
@@ -318,7 +349,32 @@ export async function getRegistrationsByAttendee(attendeeId: string): Promise<Re
     .where('attendeeId', '==', attendeeId)
     .get();
 
-  return snapshot.docs
-    .map((doc) => doc.data() as Registration)
-    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  const registrations = snapshot.docs.map((doc) => doc.data() as Registration);
+
+  // Check gate admission status across attendee events
+  await Promise.all(
+    registrations.map(async (reg) => {
+      try {
+        const checkinDoc = await adminDb
+          .collection('events')
+          .doc(reg.eventId)
+          .collection('checkins')
+          .doc(reg.id)
+          .get();
+
+        if (checkinDoc.exists) {
+          const checkinData = checkinDoc.data();
+          reg.checkedIn = true;
+          reg.checkedInAt = checkinData?.checkedInAt || checkinData?.createdAt;
+        }
+      } catch (err) {
+        console.error(`Failed to verify check-in for attendee registration ${reg.id}:`, err);
+      }
+    })
+  );
+
+  return registrations.sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
 }
+

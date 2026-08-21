@@ -286,6 +286,13 @@ export default function HomePage() {
                                   CANCELLED · REFUNDED
                                 </span>
                               </>
+                            ) : reg.checkedIn ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-[#15803D]" />
+                                <span className="text-[10px] uppercase font-bold text-[#15803D] tracking-widest">
+                                  ADMITTED · CHECKED IN
+                                </span>
+                              </>
                             ) : isEventEnded ? (
                               <>
                                 <span className="w-2 h-2 rounded-full bg-muted-text" />
@@ -344,6 +351,17 @@ export default function HomePage() {
                                 className="w-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-accent/40 text-accent hover:bg-accent/10"
                               >
                                 <span>🚫 View Refunded Receipt</span>
+                                <span>→</span>
+                              </Button>
+                            </Link>
+                          ) : reg.checkedIn ? (
+                            <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
+                              <Button
+                                variant="outline"
+                                size="md"
+                                className="w-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-primary bg-surface-low text-primary hover:bg-surface-high"
+                              >
+                                <span>✅ Pass Admitted at Gate</span>
                                 <span>→</span>
                               </Button>
                             </Link>
@@ -428,7 +446,16 @@ export default function HomePage() {
                             <StatusChip status="FREE ADMISSION" variant="success" />
                           )}
                           {userReg && (
-                            <StatusChip status="REGISTERED" variant="success" />
+                            <StatusChip
+                              status={
+                                userReg.status === 'cancelled'
+                                  ? 'CANCELLED'
+                                  : userReg.checkedIn
+                                  ? 'ADMITTED'
+                                  : 'REGISTERED'
+                              }
+                              variant={userReg.status === 'cancelled' ? 'danger' : 'success'}
+                            />
                           )}
                           {isClosed && (
                             <StatusChip
@@ -451,11 +478,19 @@ export default function HomePage() {
                         {userReg ? (
                           <Link href={`/ticket/${userReg.id}?eventId=${event.id}`}>
                             <Button
-                              variant="accent"
+                              variant={userReg.checkedIn ? 'outline' : 'accent'}
                               size="sm"
-                              className="bg-[#15803D] hover:bg-[#166534] border-[#15803D] text-[11px] font-bold"
+                              className={
+                                userReg.checkedIn
+                                  ? 'border-primary bg-surface-low text-primary text-[11px] font-bold'
+                                  : 'bg-[#15803D] hover:bg-[#166534] border-[#15803D] text-[11px] font-bold'
+                              }
                             >
-                              🎟️ View QR Pass
+                              {userReg.status === 'cancelled'
+                                ? '🚫 View Receipt'
+                                : userReg.checkedIn
+                                ? '✅ View Admitted Pass'
+                                : '🎟️ View QR Pass'}
                             </Button>
                           </Link>
                         ) : isClosed ? (

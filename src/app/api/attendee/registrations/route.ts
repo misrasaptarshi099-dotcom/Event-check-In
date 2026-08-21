@@ -39,12 +39,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ registrations: [] });
     }
 
-    // 2. Fetch corresponding event metadata
+    // 2. Fetch corresponding event metadata and check-in status
     const eventIds = Array.from(new Set(registrations.map((r) => r.eventId)));
     const eventMap = new Map<string, EventItem>();
+    const checkinMap = new Map<string, { checkedInAt: string }>();
 
-    await Promise.all(
-      eventIds.map(async (evId) => {
+    await Promise.all([
+      ...eventIds.map(async (evId) => {
         try {
           const doc = await adminDb.collection('events').doc(evId).get();
           if (doc.exists) {
@@ -53,13 +54,37 @@ export async function GET(request: Request) {
         } catch (eventErr) {
           console.error(`Failed to load event metadata for event ID [${evId}]:`, eventErr);
         }
-      })
-    );
+      }),
+      ...registrations.map(async (reg) => {
+        try {
+          const checkinDoc = await adminDb
+            .collection('events')
+            .doc(reg.eventId)
+            .collection('checkins')
+            .doc(reg.id)
+            .get();
 
-    const enriched: EnrichedRegistration[] = registrations.map((r) => ({
-      ...r,
-      event: eventMap.get(r.eventId),
-    }));
+          if (checkinDoc.exists) {
+            const data = checkinDoc.data();
+            checkinMap.set(reg.id, {
+              checkedInAt: data?.checkedInAt || data?.createdAt,
+            });
+          }
+        } catch (checkinErr) {
+          console.error(`Failed to load check-in for registration [${reg.id}]:`, checkinErr);
+        }
+      }),
+    ]);
+
+    const enriched: EnrichedRegistration[] = registrations.map((r) => {
+      const checkin = checkinMap.get(r.id);
+      return {
+        ...r,
+        checkedIn: !!checkin,
+        checkedInAt: checkin?.checkedInAt,
+        event: eventMap.get(r.eventId),
+      };
+    });
 
     return NextResponse.json({ registrations: enriched });
   } catch (error: any) {
