@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getRegistrationsByEvent } from '@/lib/services/registrations.service';
+import { getPaginatedRegistrationsByEvent } from '@/lib/services/registrations.service';
 import { getEventById } from '@/lib/services/events.service';
 import { verifyAuthToken, requireRole, requireOwnership } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, EXPORT_LIMIT } from '@/lib/security/rateLimit';
@@ -25,9 +25,20 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     requireOwnership(user, event.organizerId);
 
-    const registrations = await getRegistrationsByEvent(eventId);
+    const url = new URL(request.url);
+    const pageSize = Number(url.searchParams.get('pageSize')) || 50;
+    const cursor = url.searchParams.get('cursor') || undefined;
+    const search = url.searchParams.get('search') || undefined;
+    const status = url.searchParams.get('status') || undefined;
 
-    return NextResponse.json({ roster: registrations });
+    const result = await getPaginatedRegistrationsByEvent(eventId, {
+      pageSize,
+      cursor,
+      search,
+      status,
+    });
+
+    return NextResponse.json(result);
   } catch (error: any) {
     const status = error.statusCode || 500;
     return NextResponse.json({ error: error.message || 'Failed to fetch roster.' }, { status });

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Input, ImageUpload, StatusChip } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils/format';
+import { convertLocalToUtcIso } from '@/lib/utils/timezone';
+import { getFreshAuthToken } from '@/lib/firebase/client';
 
 export default function CreateEventPage() {
   const router = useRouter();
@@ -45,12 +47,15 @@ export default function CreateEventPage() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('vouch_auth_token');
+      const token = await getFreshAuthToken();
       if (!token) {
         throw new Error('You must be signed in as an organizer to create events.');
       }
 
-      if (eventEndDate && new Date(eventEndDate).getTime() < new Date(eventDate).getTime()) {
+      const utcEventDate = convertLocalToUtcIso(eventDate, timezone);
+      const utcEventEndDate = eventEndDate ? convertLocalToUtcIso(eventEndDate, timezone) : undefined;
+
+      if (utcEventEndDate && new Date(utcEventEndDate).getTime() < new Date(utcEventDate).getTime()) {
         throw new Error('Event end time cannot be before start time.');
       }
 
@@ -63,8 +68,8 @@ export default function CreateEventPage() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || undefined,
-          eventDate,
-          eventEndDate: eventEndDate || undefined,
+          eventDate: utcEventDate,
+          eventEndDate: utcEventEndDate,
           timezone,
           venue: venue.trim() || undefined,
           capacity: Number(capacity),

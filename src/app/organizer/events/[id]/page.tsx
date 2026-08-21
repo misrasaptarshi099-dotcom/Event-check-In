@@ -28,11 +28,64 @@ export default function EventDashboardPage({ params }: PageParams) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Roster Pagination & Filter states
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [rosterStatusFilter, setRosterStatusFilter] = useState('all');
+  const [rosterPage, setRosterPage] = useState(1);
+  const [rosterCursorHistory, setRosterCursorHistory] = useState<string[]>(['']);
+  const [rosterTotalCount, setRosterTotalCount] = useState(0);
+  const [rosterHasMore, setRosterHasMore] = useState(false);
+  const [rosterLoading, setRosterLoading] = useState(false);
+
   // Edit & Delete Modal states
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const fetchRoster = React.useCallback(async (
+    page: number = 1,
+    cursor?: string,
+    search: string = rosterSearch,
+    status: string = rosterStatusFilter
+  ) => {
+    setRosterLoading(true);
+    try {
+      const token = await getFreshAuthToken();
+      if (!token) return;
+
+      const params = new URLSearchParams({
+        pageSize: '50',
+      });
+      if (cursor) params.set('cursor', cursor);
+      if (search.trim()) params.set('search', search.trim());
+      if (status && status !== 'all') params.set('status', status);
+
+      const res = await fetch(`/api/events/${eventId}/roster?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setRegistrations(data.roster || []);
+        setRosterTotalCount(data.totalCount || 0);
+        setRosterHasMore(Boolean(data.hasMore));
+        setRosterPage(page);
+
+        if (data.nextCursor) {
+          setRosterCursorHistory((prev) => {
+            const nextHistory = [...prev];
+            nextHistory[page] = data.nextCursor;
+            return nextHistory;
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch paginated roster:', e);
+    } finally {
+      setRosterLoading(false);
+    }
+  }, [eventId, rosterSearch, rosterStatusFilter]);
 
   const fetchData = React.useCallback(async (signal?: AbortSignal) => {
     try {
@@ -67,11 +120,16 @@ export default function EventDashboardPage({ params }: PageParams) {
         setFinance(finData.finance);
       }
 
-      // 3. Fetch Roster
-      const rosterRes = await fetch(`/api/events/${eventId}/roster`, { headers: authHeader, signal });
+      // 3. Fetch Initial Roster
+      const rosterRes = await fetch(`/api/events/${eventId}/roster?pageSize=50`, { headers: authHeader, signal });
       if (rosterRes.ok) {
         const rosterData = await rosterRes.json();
         setRegistrations(rosterData.roster || []);
+        setRosterTotalCount(rosterData.totalCount || 0);
+        setRosterHasMore(Boolean(rosterData.hasMore));
+        if (rosterData.nextCursor) {
+          setRosterCursorHistory(['', rosterData.nextCursor]);
+        }
       }
     } catch (err: any) {
       if (err.name === 'AbortError') return;
@@ -416,7 +474,7 @@ export default function EventDashboardPage({ params }: PageParams) {
         {/* 4. ATTENDEE ROSTER TAB */}
         {activeTab === 'roster' && (
           <div id="panel-roster" role="tabpanel" aria-labelledby="tab-roster" className="space-y-4 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h4 className="text-base font-serif italic text-primary font-medium tracking-tight">
                   Attendee Ledger Roster
@@ -453,12 +511,95 @@ export default function EventDashboardPage({ params }: PageParams) {
               </Button>
             </div>
 
-            <Table
-              columns={rosterColumns}
-              data={registrations}
-              keyExtractor={(r) => r.id}
-              emptyMessage="No attendees registered yet."
-            />
+            {/* Filter & Search Toolbar */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-surface border border-border-rigid p-3">
+              <div className="sm:col-span-8">
+                <input
+                  type="text"
+                  placeholder="Search by attendee name, email, or registration ID..."
+                  value={rosterSearch}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRosterSearch(val);
+                    fetchRoster(1, undefined, val, rosterStatusFilter);
+                  }}
+                  className="w-full bg-surface-low border border-border-rigid px-3 py-2 text-xs font-mono text-primary placeholder:text-muted-text focus:outline-none focus:border-primary rounded-none"
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <select
+                  value={rosterStatusFilter}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRosterStatusFilter(val);
+                    fetchRoster(1, undefined, rosterSearch, val);
+                  }}
+                  className="w-full bg-surface-low border border-border-rigid px-3 py-2 text-xs font-mono text-primary focus:outline-none focus:border-primary rounded-none"
+                >
+                  <option value="all">All Attendees</option>
+                  <option value="confirmed">Confirmed (Unscanned)</option>
+                  <option value="checked_in">Checked In / Attended</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            {rosterLoading ? (
+              <div className="p-12 border border-border-rigid text-center flex flex-col items-center justify-center space-y-3 bg-surface">
+                <span className="w-6 h-6 border-2 border-primary animate-spin" />
+                <span className="text-xs text-muted-text uppercase tracking-widest">Querying attendee roster ledger...</span>
+              </div>
+            ) : (
+              <Table
+                columns={rosterColumns}
+                data={registrations}
+                keyExtractor={(r) => r.id}
+                emptyMessage="No attendees matched your search/filter criteria."
+              />
+            )}
+
+            {/* Pagination Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border border-border-rigid p-3 bg-surface text-xs font-mono">
+              <div className="text-muted-text">
+                Showing{' '}
+                <span className="text-primary font-bold">
+                  {registrations.length > 0 ? (rosterPage - 1) * 50 + 1 : 0}–{(rosterPage - 1) * 50 + registrations.length}
+                </span>{' '}
+                of <span className="text-primary font-bold">{rosterTotalCount}</span> attendees
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={rosterPage <= 1 || rosterLoading}
+                  onClick={() => {
+                    const prevPage = rosterPage - 1;
+                    const prevCursor = prevPage > 1 ? rosterCursorHistory[prevPage - 1] : undefined;
+                    fetchRoster(prevPage, prevCursor);
+                  }}
+                >
+                  ◀ Previous
+                </Button>
+
+                <span className="px-2 font-bold text-primary">
+                  Page {rosterPage} of {Math.max(1, Math.ceil(rosterTotalCount / 50))}
+                </span>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!rosterHasMore || rosterLoading}
+                  onClick={() => {
+                    const nextPage = rosterPage + 1;
+                    const currentCursor = rosterCursorHistory[rosterPage];
+                    fetchRoster(nextPage, currentCursor);
+                  }}
+                >
+                  Next ▶
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 

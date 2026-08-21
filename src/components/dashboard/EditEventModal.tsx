@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Input, ImageUpload } from '@/components/ui';
 import { getFreshAuthToken } from '@/lib/firebase/client';
+import { formatUtcToLocalInput, convertLocalToUtcIso } from '@/lib/utils/timezone';
 import type { EventItem } from '@/types';
 
 interface EditEventModalProps {
@@ -10,23 +11,6 @@ interface EditEventModalProps {
   isOpen: boolean;
   onClose: () => void;
   onEventUpdated: (updated: EventItem) => void;
-}
-
-function toLocalDatetimeString(isoDate?: string): string {
-  if (!isoDate) return '';
-  try {
-    const d = new Date(isoDate);
-    if (isNaN(d.getTime())) return '';
-    // Format YYYY-MM-DDTHH:mm
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  } catch {
-    return '';
-  }
 }
 
 export function EditEventModal({ event, isOpen, onClose, onEventUpdated }: EditEventModalProps) {
@@ -46,11 +30,12 @@ export function EditEventModal({ event, isOpen, onClose, onEventUpdated }: EditE
 
   useEffect(() => {
     if (event) {
+      const tz = event.timezone || 'UTC';
       setName(event.name || '');
       setDescription(event.description || '');
-      setEventDate(toLocalDatetimeString(event.eventDate));
-      setEventEndDate(toLocalDatetimeString(event.eventEndDate));
-      setTimezone(event.timezone || 'UTC');
+      setEventDate(formatUtcToLocalInput(event.eventDate, tz));
+      setEventEndDate(event.eventEndDate ? formatUtcToLocalInput(event.eventEndDate, tz) : '');
+      setTimezone(tz);
       setVenue(event.venue || '');
       setCapacity(String(event.capacity || 100));
       setTicketPrice(String(event.ticketPrice ?? 0));
@@ -74,7 +59,10 @@ export function EditEventModal({ event, isOpen, onClose, onEventUpdated }: EditE
       return;
     }
 
-    if (eventEndDate && new Date(eventEndDate).getTime() < new Date(eventDate).getTime()) {
+    const utcEventDate = convertLocalToUtcIso(eventDate, timezone);
+    const utcEventEndDate = eventEndDate ? convertLocalToUtcIso(eventEndDate, timezone) : null;
+
+    if (utcEventEndDate && new Date(utcEventEndDate).getTime() < new Date(utcEventDate).getTime()) {
       setError('Event end time cannot be before start time.');
       setLoading(false);
       return;
@@ -90,8 +78,8 @@ export function EditEventModal({ event, isOpen, onClose, onEventUpdated }: EditE
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim(),
-          eventDate: eventDate ? new Date(eventDate).toISOString() : undefined,
-          eventEndDate: eventEndDate ? new Date(eventEndDate).toISOString() : null,
+          eventDate: utcEventDate,
+          eventEndDate: utcEventEndDate,
           timezone,
           venue: venue.trim(),
           capacity: Number(capacity),

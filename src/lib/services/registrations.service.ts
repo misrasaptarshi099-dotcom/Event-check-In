@@ -109,10 +109,31 @@ export async function getRegistrationById(regId: string): Promise<Registration |
   return doc.data() as Registration;
 }
 
+export interface PaginatedRosterResult {
+  roster: Registration[];
+  nextCursor?: string;
+  hasMore: boolean;
+  totalCount: number;
+  pageSize: number;
+}
+
 /**
- * Retrieves all registrations for an event, joining check-in status for each attendee.
+ * Retrieves paginated registrations for an event with cursor, search, and status filtering.
  */
-export async function getRegistrationsByEvent(eventId: string): Promise<Registration[]> {
+export async function getPaginatedRegistrationsByEvent(
+  eventId: string,
+  options?: {
+    pageSize?: number;
+    cursor?: string;
+    search?: string;
+    status?: string;
+  }
+): Promise<PaginatedRosterResult> {
+  const pageSize = Math.max(1, Math.min(Number(options?.pageSize) || 50, 200));
+  const cursor = options?.cursor?.trim();
+  const search = options?.search?.trim().toLowerCase();
+  const statusFilter = options?.status?.trim().toLowerCase();
+
   const [snapshot, checkinsSnap] = await Promise.all([
     adminDb
       .collection(REGISTRATIONS_COLLECTION)
@@ -133,7 +154,7 @@ export async function getRegistrationsByEvent(eventId: string): Promise<Registra
     });
   }
 
-  return snapshot.docs
+  let allRegistrations: Registration[] = snapshot.docs
     .map((doc) => {
       const reg = doc.data() as Registration;
       const checkin = checkinsMap.get(reg.id);
@@ -145,6 +166,62 @@ export async function getRegistrationsByEvent(eventId: string): Promise<Registra
       };
     })
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+  // Apply status filter
+  if (statusFilter && statusFilter !== 'all') {
+    allRegistrations = allRegistrations.filter((r) => {
+      if (statusFilter === 'active' || statusFilter === 'confirmed') {
+        return r.status === 'active' && !r.checkedIn;
+      }
+      if (statusFilter === 'checked_in' || statusFilter === 'attended') {
+        return r.checkedIn;
+      }
+      if (statusFilter === 'cancelled') {
+        return r.status === 'cancelled';
+      }
+      return true;
+    });
+  }
+
+  // Apply search query
+  if (search) {
+    allRegistrations = allRegistrations.filter(
+      (r) =>
+        r.attendeeName.toLowerCase().includes(search) ||
+        r.attendeeEmail.toLowerCase().includes(search) ||
+        r.id.toLowerCase().includes(search)
+    );
+  }
+
+  const totalCount = allRegistrations.length;
+
+  let startIndex = 0;
+  if (cursor) {
+    const cursorIdx = allRegistrations.findIndex((r) => r.id === cursor);
+    if (cursorIdx !== -1) {
+      startIndex = cursorIdx + 1;
+    }
+  }
+
+  const pageSlice = allRegistrations.slice(startIndex, startIndex + pageSize);
+  const hasMore = startIndex + pageSize < totalCount;
+  const nextCursor = hasMore && pageSlice.length > 0 ? pageSlice[pageSlice.length - 1].id : undefined;
+
+  return {
+    roster: pageSlice,
+    nextCursor,
+    hasMore,
+    totalCount,
+    pageSize,
+  };
+}
+
+/**
+ * Retrieves all registrations for an event, joining check-in status for each attendee.
+ */
+export async function getRegistrationsByEvent(eventId: string): Promise<Registration[]> {
+  const result = await getPaginatedRegistrationsByEvent(eventId, { pageSize: 1000 });
+  return result.roster;
 }
 
 /**
