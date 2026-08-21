@@ -94,7 +94,7 @@ To guarantee continuous gate operations in dead zones or crowded venue environme
 4. Auto-Reconciliation: When network connectivity is restored, the scanner streams pending scans to `/api/checkins/sync`. The server processes each entry within a transaction, recording the authoritative server sync time while logging the physical scan timestamp.
 5. Conflict Resolution: If an offline pass was already scanned online by another station, the sync log flags a `duplicate_conflict` without corrupting the authoritative audit record.
 
-## 5. Third Normal Form (3NF) Database Design
+## 5. Database Design
 
 The data architecture adheres to Third Normal Form (3NF) principles, eliminating partial and transitive functional dependencies.
 
@@ -171,11 +171,6 @@ The data architecture adheres to Third Normal Form (3NF) principles, eliminating
 | createdAt         : timestamp                               |
 +-------------------------------------------------------------+
 ```
-
-### Normal Form Verification
-1. First Normal Form (1NF): All attributes contain atomic scalar values with distinct primary keys and no repeating groups.
-2. Second Normal Form (2NF): No non-key attribute has a partial functional dependency on a composite key. User identity attributes reside solely in `USERS`, and event details reside solely in `EVENTS`.
-3. Third Normal Form (3NF): No transitive functional dependencies exist. Registrations reference Foreign Keys (`eventId`, `attendeeId`) without embedding un-normalized metadata.
 
 ## 6. Real-Time Operations and Financial Telemetry
 
