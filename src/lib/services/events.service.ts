@@ -1,5 +1,6 @@
 import { adminDb } from '@/lib/firebase/admin';
 import type { EventItem } from '@/types';
+import { serverCache } from '@/lib/cache/serverCache';
 
 const EVENTS_COLLECTION = 'events';
 
@@ -32,6 +33,8 @@ export async function createEvent(
   if (data.currency !== undefined) event.currency = data.currency;
 
   await docRef.set(event);
+  serverCache.setEvent(event.id, event);
+  serverCache.delete('all_public_events');
   return event;
 }
 
@@ -39,9 +42,14 @@ export async function createEvent(
  * Retrieves a single event by ID.
  */
 export async function getEventById(eventId: string): Promise<EventItem | null> {
+  const cached = serverCache.getEvent(eventId);
+  if (cached) return cached;
+
   const doc = await adminDb.collection(EVENTS_COLLECTION).doc(eventId).get();
   if (!doc.exists) return null;
-  return doc.data() as EventItem;
+  const event = doc.data() as EventItem;
+  serverCache.setEvent(eventId, event);
+  return event;
 }
 
 /**
@@ -78,6 +86,11 @@ export async function getAllOrganizerEvents(limitCount: number = 100): Promise<E
  * and sorts upcoming events in chronological order by eventDate before slicing to limitCount.
  */
 export async function getAllPublicEvents(limitCount: number = 100): Promise<EventItem[]> {
+  const cached = serverCache.getPublicEvents();
+  if (cached) {
+    return cached.slice(0, limitCount);
+  }
+
   const snapshot = await adminDb
     .collection(EVENTS_COLLECTION)
     .orderBy('createdAt', 'desc')
@@ -85,7 +98,7 @@ export async function getAllPublicEvents(limitCount: number = 100): Promise<Even
 
   const now = Date.now();
 
-  return snapshot.docs
+  const events = snapshot.docs
     .map((doc) => doc.data() as EventItem)
     .filter((event) => {
       // Exclude cancelled events
@@ -97,8 +110,10 @@ export async function getAllPublicEvents(limitCount: number = 100): Promise<Even
         : new Date(event.eventDate).getTime();
       return endTime > now;
     })
-    .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
-    .slice(0, limitCount);
+    .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+
+  serverCache.setPublicEvents(events);
+  return events.slice(0, limitCount);
 }
 
 /**
@@ -143,6 +158,9 @@ export async function updateEvent(
     // No capacity change — standard update
     await eventRef.update(cleanUpdates);
   }
+
+  serverCache.invalidateEvent(eventId);
+  serverCache.delete('all_public_events');
 }
 
 /**
@@ -228,6 +246,8 @@ export async function cancelEntireEvent(
 
   await batch.commit();
 
+  serverCache.invalidateEvent(eventId);
+
   return {
     event: updatedEvent,
     registrationsCancelled,
@@ -240,5 +260,6 @@ export async function cancelEntireEvent(
  */
 export async function deleteEvent(eventId: string): Promise<void> {
   await adminDb.collection(EVENTS_COLLECTION).doc(eventId).delete();
+  serverCache.invalidateEvent(eventId);
 }
 

@@ -29,14 +29,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${geistMono.variable} ${playfairDisplay.variable}`}>
-      <head>
-        {/* PP Editorial New – editorial serif */}
-        <link
-          rel="preconnect"
-          href="https://db.onlinewebfonts.com"
-          crossOrigin="anonymous"
-        />
-      </head>
       <body className="min-h-screen bg-surface text-primary font-mono antialiased">
         {children}
       </body>

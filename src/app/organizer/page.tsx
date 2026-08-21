@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, getFreshAuthToken } from '@/lib/firebase/client';
-import { Button, Input, StatusChip, ProgressBar } from '@/components/ui';
+import { Button, Input, StatusChip, ProgressBar, CardNav } from '@/components/ui';
 import { EditEventModal } from '@/components/dashboard/EditEventModal';
 import type { EventItem } from '@/types';
 
@@ -87,20 +87,37 @@ export default function OrganizerDashboard() {
   };
 
   useEffect(() => {
-    const role = localStorage.getItem('vouch_user_role');
     const email = localStorage.getItem('vouch_user_email');
     setUserEmail(email);
 
-    if (role !== 'organizer' && !email) {
-      window.location.href = '/auth/login';
-      return;
-    }
-
     const loadDashboard = async () => {
       const token = await getFreshAuthToken();
-      if (!token) { window.location.href = '/auth/login'; return; }
-      await Promise.all([fetchEvents(token), fetchOrganizers(token)]).catch((err: any) => setLoadError(err.message || 'Unable to load organizer access. Please try again.'));
+      if (!token) {
+        window.location.href = '/auth/login';
+        return;
+      }
+
+      try {
+        // Authoritatively verify role from 3NF users table
+        const meRes = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const meData = await meRes.json();
+
+        if (meData.role !== 'organizer') {
+          window.location.href = '/';
+          return;
+        }
+
+        localStorage.setItem('vouch_user_role', 'organizer');
+        setUserEmail(meData.email);
+
+        await Promise.all([fetchEvents(token), fetchOrganizers(token)]);
+      } catch (err: any) {
+        setLoadError(err.message || 'Unable to load organizer access. Please try again.');
+      }
     };
+
     void loadDashboard();
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -181,51 +198,15 @@ export default function OrganizerDashboard() {
 
   return (
     <div className="min-h-screen flex flex-col font-mono bg-surface text-primary">
-      {/* Navigation Header */}
-      <header className="border-b border-border-rigid px-6 md:px-12 flex items-center justify-between h-16 bg-surface">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-sm font-mono font-bold tracking-[0.25em] text-primary">
-              VOUCH
-            </span>
-            <span className="text-[10px] font-mono text-muted-text">/</span>
-          </Link>
-          <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
-            Organizer Hub
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {userEmail && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 border border-border-rigid bg-surface-high text-[10px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-              <span className="font-semibold uppercase">ORGANIZER:</span>
-              <span className="text-muted-text truncate max-w-[180px]">{userEmail}</span>
-            </div>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowTeamModal(true)}
-            title="Manage Authorized Organizers"
-          >
-            👥 Team Access
-          </Button>
-          <Link href="/scanner">
-            <Button variant="outline" size="sm">
-              📷 Fast Gate Scanner
-            </Button>
-          </Link>
-          <Link href="/organizer/create">
-            <Button variant="accent" size="sm">
-              + Create Event
-            </Button>
-          </Link>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            Logout
-          </Button>
-        </div>
-      </header>
+      {/* Navigation Card Nav */}
+      <CardNav
+        currentSection="Organizer Hub"
+        role="organizer"
+        userEmail={userEmail}
+        organizersCount={organizers.length}
+        onOpenTeamModal={() => setShowTeamModal(true)}
+        onLogout={handleLogout}
+      />
 
       {/* Main Container */}
       <main className="flex-1 p-6 md:p-12 max-w-7xl w-full mx-auto space-y-8">

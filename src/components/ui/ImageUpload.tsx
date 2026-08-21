@@ -3,12 +3,14 @@
 import React, { useState, useRef } from 'react';
 import { clsx } from 'clsx';
 import { Button } from './Button';
+import { uploadEventPoster } from '@/lib/firebase/storage';
 
 export interface ImageUploadProps {
   value?: string;
-  onChange: (dataUrl: string) => void;
+  onChange: (url: string) => void;
   onClear?: () => void;
   label?: string;
+  eventId?: string;
   className?: string;
 }
 
@@ -27,34 +29,46 @@ const PRESET_BANNERS = [
   },
 ];
 
-export function ImageUpload({ value, onChange, onClear, label = 'Event Banner Image', className }: ImageUploadProps) {
+export function ImageUpload({
+  value,
+  onChange,
+  onClear,
+  label = 'Event Banner Image',
+  eventId = 'new_event',
+  className,
+}: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     setError(null);
     if (!file.type.startsWith('image/')) {
       setError('Please select an image file (PNG, JPEG, WebP).');
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be smaller than 5MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image must be smaller than 10MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      if (dataUrl) {
-        onChange(dataUrl);
-      }
-    };
-    reader.onerror = () => {
-      setError('Failed to read image file.');
-    };
-    reader.readAsDataURL(file);
+    setIsUploading(true);
+    setUploadProgress(10);
+
+    try {
+      const url = await uploadEventPoster(file, eventId, (progress) => {
+        setUploadProgress(progress);
+      });
+      onChange(url);
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload event poster.');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -111,6 +125,18 @@ export function ImageUpload({ value, onChange, onClear, label = 'Event Banner Im
             </Button>
           </div>
         </div>
+      ) : isUploading ? (
+        <div className="border-2 border-dashed border-primary p-6 text-center flex flex-col items-center justify-center min-h-[140px] bg-surface-low space-y-3">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent animate-spin" />
+          <div className="space-y-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-primary">
+              Uploading & Optimizing Poster... {uploadProgress > 0 ? `${uploadProgress}%` : ''}
+            </p>
+            <p className="text-[10px] text-muted-text">
+              Compressing image and saving to Cloud Storage
+            </p>
+          </div>
+        </div>
       ) : (
         <div
           onDragOver={handleDragOver}
@@ -127,7 +153,7 @@ export function ImageUpload({ value, onChange, onClear, label = 'Event Banner Im
             Click to upload or drag & drop banner
           </p>
           <p className="text-[10px] text-muted-text mt-1">
-            Recommended: 16:9 ratio (PNG, JPG, WebP up to 5MB)
+            Recommended: 16:9 ratio (PNG, JPG, WebP up to 10MB)
           </p>
         </div>
       )}

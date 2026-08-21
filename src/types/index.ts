@@ -14,6 +14,18 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export interface UserAccount {
+  id: string; // Firebase Auth UID
+  email: string; // Normalized lowercase email
+  displayName: string;
+  photoURL?: string;
+  role: UserRole; // 'organizer' | 'attendee'
+  accountStatus: 'active' | 'suspended';
+  createdAt: string;
+  lastLoginAt: string;
+  updatedAt: string;
+}
+
 export interface EventItem {
   id: string;
   organizerId: string;
@@ -41,6 +53,7 @@ export interface Registration {
   attendeeId: string;
   attendeeName: string;
   attendeeEmail: string;
+  passCode?: string; // Short, human-friendly, opaque ticket code (e.g. 'VCH-7K9M-2P4X')
   qrToken: string;
   totpSecret: string; // Base32 RFC 6238 secret (delivered once to attendee)
   status: RegistrationStatus;

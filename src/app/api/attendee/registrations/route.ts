@@ -15,24 +15,29 @@ export async function GET(request: Request) {
     }
 
     let userEmail: string;
+    let userId: string;
     try {
       const authUser = await verifyAuthToken(authHeader);
       if (!authUser || !authUser.email) {
         return NextResponse.json({ registrations: [] });
       }
       userEmail = authUser.email.trim().toLowerCase();
+      userId = authUser.uid;
     } catch {
       return NextResponse.json({ registrations: [] });
     }
 
-    // 1. Fetch registrations for this authenticated attendee email only
-    const regSnap = await adminDb
-      .collection('registrations')
-      .where('attendeeEmail', '==', userEmail)
-      .get();
+    // 1. Fetch registrations by userId (3NF primary key) or attendeeEmail
+    const [byUidSnap, byEmailSnap] = await Promise.all([
+      adminDb.collection('registrations').where('attendeeId', '==', userId).get(),
+      adminDb.collection('registrations').where('attendeeEmail', '==', userEmail).get(),
+    ]);
 
-    const registrations = regSnap.docs
-      .map((doc) => doc.data() as Registration)
+    const regMap = new Map<string, Registration>();
+    byUidSnap.docs.forEach((doc) => regMap.set(doc.id, doc.data() as Registration));
+    byEmailSnap.docs.forEach((doc) => regMap.set(doc.id, doc.data() as Registration));
+
+    const registrations = Array.from(regMap.values())
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
     if (registrations.length === 0) {
