@@ -1,11 +1,18 @@
 import type { Metadata } from 'next';
-import { Geist_Mono } from 'next/font/google';
+import { Geist_Mono, Playfair_Display } from 'next/font/google';
 import './globals.css';
 
 const geistMono = Geist_Mono({
   subsets: ['latin'],
   variable: '--font-geist-mono',
   display: 'swap',
+});
+
+const playfairDisplay = Playfair_Display({
+  subsets: ['latin'],
+  variable: '--font-playfair-display',
+  display: 'swap',
+  style: ['normal', 'italic'],
 });
 
 export const metadata: Metadata = {
@@ -21,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={geistMono.variable}>
+    <html lang="en" className={`${geistMono.variable} ${playfairDisplay.variable}`}>
       <head>
         {/* PP Editorial New – editorial serif */}
         <link
