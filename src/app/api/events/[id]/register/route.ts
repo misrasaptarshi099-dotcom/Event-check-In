@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { registerForEvent } from '@/lib/services/registrations.service';
 import { verifyAuthToken } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, REGISTRATION_LIMIT } from '@/lib/security/rateLimit';
+import { sanitizeText, sanitizeEmail, sanitizeInteger } from '@/lib/security/sanitize';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -33,35 +34,33 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { attendeeName, attendeeEmail, guestCount: rawGuestCount } = body;
+    const cleanName = sanitizeText(body.attendeeName, 100);
 
-    if (!attendeeName || typeof attendeeName !== 'string' || attendeeName.trim().length === 0) {
+    if (!cleanName) {
       return NextResponse.json({ error: 'Attendee name is required.' }, { status: 400 });
     }
 
-    const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!attendeeEmail || typeof attendeeEmail !== 'string' || !EMAIL_REGEX.test(attendeeEmail.trim())) {
+    let cleanEmail = '';
+    try {
+      cleanEmail = sanitizeEmail(body.attendeeEmail);
+    } catch {
       return NextResponse.json({ error: 'Valid attendee email is required.' }, { status: 400 });
     }
 
     // 2. Strict Identity Enforcement: Cannot register with a different email than authenticated account
     const normalizedAuthEmail = authUser.email.trim().toLowerCase();
-    const normalizedInputEmail = attendeeEmail.trim().toLowerCase();
 
-    if (normalizedAuthEmail !== normalizedInputEmail) {
+    if (normalizedAuthEmail !== cleanEmail) {
       return NextResponse.json(
         {
-          error: `Identity mismatch: You are signed in as ${normalizedAuthEmail}. You cannot register using a different email address (${normalizedInputEmail}).`,
+          error: `Identity mismatch: You are signed in as ${normalizedAuthEmail}. You cannot register using a different email address (${cleanEmail}).`,
         },
         { status: 403 }
       );
     }
 
     // 3. Validate guest count: 1–5 (includes the registrant)
-    const guestCount = Math.floor(Number(rawGuestCount) || 1);
-    if (guestCount < 1 || guestCount > 5) {
-      return NextResponse.json({ error: 'Guest count must be between 1 and 5.' }, { status: 400 });
-    }
+    const guestCount = sanitizeInteger(body.guestCount, 1, 5, 1);
 
     // Generate authoritative attendee ID tied to user UID
     const resolvedAttendeeId = authUser.uid;
@@ -69,7 +68,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const registration = await registerForEvent(
       eventId,
       resolvedAttendeeId,
-      attendeeName.trim(),
+      cleanName,
       normalizedAuthEmail,
       guestCount
     );

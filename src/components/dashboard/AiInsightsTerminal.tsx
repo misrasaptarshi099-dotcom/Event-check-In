@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { clsx } from 'clsx';
 import { Button } from '../ui/Button';
 import { StatusChip } from '../ui/StatusChip';
+import { getFreshAuthToken } from '@/lib/firebase/client';
 import type { AiInsightResponse } from '@/lib/services/ai-insights.service';
 
 export interface AiInsightsTerminalProps {
@@ -12,10 +13,10 @@ export interface AiInsightsTerminalProps {
 }
 
 const PRESET_PROMPTS = [
-  'What is our total gross revenue and ticket count?',
+  'Predict final revenue & booking pace based on time left',
+  'What is our current sales velocity and projected sellout time?',
   'What was our peak check-in rush hour?',
   'How many attendees are no-shows and what is the no-show rate?',
-  'How many remaining spots do we have left?',
   'Give me a complete operational & financial executive summary.',
 ];
 
@@ -35,13 +36,15 @@ export function AiInsightsTerminal({ eventId, className }: AiInsightsTerminalPro
     setError(null);
 
     try {
-      const token = localStorage.getItem('vouch_auth_token') || 'mock-organizer-token';
+      const token = await getFreshAuthToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`/api/events/${eventId}/ai-insights`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({ question: q }),
       });
 
@@ -81,23 +84,23 @@ export function AiInsightsTerminal({ eventId, className }: AiInsightsTerminalPro
         <div>
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-serif italic text-primary font-medium tracking-tight">
-              Gemini Operations & Financial Intelligence
+              Gemini Operations & Predictive Intelligence
             </h4>
-            <StatusChip status="GEMINI 3.5 FLASH LITE" variant="neutral" />
+            <StatusChip status="GEMINI PREDICTIVE ENGINE" variant="success" />
           </div>
           <p className="text-[10px] text-muted-text uppercase tracking-widest mt-0.5">
-            Zero-hallucination natural language queries over live event ledger data
+            Mathematical revenue run-rate forecasting, velocity trends, and live gate telemetry
           </p>
         </div>
         <div className="text-[10px] text-muted-text">
-          Max 5 req/min · 500 token budget
+          Max 5 req/min · 1,200 token budget
         </div>
       </div>
 
       {/* Preset Prompt Chips */}
       <div className="space-y-1.5">
         <p className="text-[10px] uppercase tracking-widest text-muted-text">
-          Suggested Queries:
+          Suggested Predictive Queries:
         </p>
         <div className="flex flex-wrap gap-1.5">
           {PRESET_PROMPTS.map((prompt) => (
@@ -127,7 +130,7 @@ export function AiInsightsTerminal({ eventId, className }: AiInsightsTerminalPro
       >
         <input
           type="text"
-          placeholder="Ask anything about event attendance, peak rush hours, or ticket revenue..."
+          placeholder="Ask for revenue predictions, sales pace forecasts, peak rush hours, or strategy..."
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           disabled={loading}
@@ -155,27 +158,27 @@ export function AiInsightsTerminal({ eventId, className }: AiInsightsTerminalPro
       <div className="space-y-4">
         {history.length === 0 ? (
           <div className="border border-dashed border-border-rigid p-8 text-center text-muted-text font-serif italic text-sm">
-            Ask a question above or click a suggested query to inspect event intelligence in real time.
+            Ask a question above or click a suggested query to inspect real-time forecasts and operational intelligence.
           </div>
         ) : (
           history.map((item, idx) => (
             <div
               key={idx}
-              className="border border-border-rigid p-4 bg-surface-low space-y-2 animate-in fade-in"
+              className="border border-border-rigid p-4 bg-surface-low space-y-3 animate-in fade-in"
             >
               <div className="flex items-center justify-between border-b border-border-rigid/40 pb-2">
                 <span className="text-xs font-semibold text-primary">Q: {item.question}</span>
                 <div className="flex items-center gap-2">
                   <StatusChip
-                    status={item.source === 'ai' ? 'GEMINI' : 'RAW STATS'}
+                    status={item.source === 'ai' ? 'GEMINI' : 'STATISTICAL MODEL'}
                     variant={item.source === 'ai' ? 'success' : 'neutral'}
                   />
                   <span className="text-[10px] text-muted-text">{item.timestamp}</span>
                 </div>
               </div>
-              <p className="text-sm font-serif italic text-primary leading-relaxed">
+              <div className="text-xs sm:text-sm text-primary leading-relaxed whitespace-pre-wrap font-sans">
                 {item.answer}
-              </p>
+              </div>
             </div>
           ))
         )}

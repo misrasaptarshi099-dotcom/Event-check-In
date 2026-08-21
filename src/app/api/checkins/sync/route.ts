@@ -5,6 +5,7 @@ import { getEventById } from '@/lib/services/events.service';
 import { parseAndVerifyQrPayload, verifyTotpToken } from '@/lib/security/totp';
 import { verifyAuthToken, requireRole, requireOwnership } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, CHECKIN_SCAN_LIMIT } from '@/lib/security/rateLimit';
+import { sanitizeText } from '@/lib/security/sanitize';
 
 export async function POST(request: Request) {
   try {
@@ -16,13 +17,17 @@ export async function POST(request: Request) {
     if (rateLimitRes) return rateLimitRes;
 
     const body = await request.json();
-    const { eventId, registrationId, stationId, clientScanId, clientScannedAt, qrToken, otp, rawQrPayload } = body;
+    const cleanEventId = sanitizeText(body.eventId, 128);
+    const cleanRegId = sanitizeText(body.registrationId, 128);
+    const cleanScanId = sanitizeText(body.clientScanId, 128);
+    const cleanStationId = sanitizeText(body.stationId, 64) || 'Station-Offline';
+    const { clientScannedAt, qrToken, otp, rawQrPayload } = body;
 
-    if (!eventId || !registrationId || !clientScanId) {
+    if (!cleanEventId || !cleanRegId || !cleanScanId) {
       return NextResponse.json({ error: 'Missing required sync fields.' }, { status: 400 });
     }
 
-    const event = await getEventById(eventId);
+    const event = await getEventById(cleanEventId);
     if (!event) {
       return NextResponse.json({ error: 'Event not found.' }, { status: 404 });
     }
@@ -49,8 +54,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const registration = await getRegistrationById(registrationId);
-    if (!registration || registration.eventId !== eventId) {
+    const registration = await getRegistrationById(cleanRegId);
+    if (!registration || registration.eventId !== cleanEventId) {
       return NextResponse.json({ error: 'Registration not found for this event.' }, { status: 404 });
     }
 
@@ -63,8 +68,8 @@ export async function POST(request: Request) {
       const verification = parseAndVerifyQrPayload(
         rawQrPayload,
         registration.totpSecret,
-        registrationId,
-        eventId
+        cleanRegId,
+        cleanEventId
       );
       if (!verification.isValid) {
         return NextResponse.json({ error: verification.error || 'Invalid QR payload.' }, { status: 400 });
@@ -82,13 +87,13 @@ export async function POST(request: Request) {
 
     try {
       const checkin = await performCheckin({
-        eventId,
-        registrationId,
+        eventId: cleanEventId,
+        registrationId: cleanRegId,
         attendeeName: registration.attendeeName,
         attendeeEmail: registration.attendeeEmail,
-        stationId: stationId || 'Offline-Station',
+        stationId: cleanStationId,
         source: 'offline_sync',
-        clientScanId,
+        clientScanId: cleanScanId,
         clientScannedAt: clientScannedAt || new Date().toISOString(),
       });
 

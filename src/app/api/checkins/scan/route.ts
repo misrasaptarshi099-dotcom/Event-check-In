@@ -5,6 +5,7 @@ import { getEventById } from '@/lib/services/events.service';
 import { parseAndVerifyQrPayload, verifyTotpToken } from '@/lib/security/totp';
 import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, CHECKIN_SCAN_LIMIT } from '@/lib/security/rateLimit';
+import { sanitizeText } from '@/lib/security/sanitize';
 import type { ScanOutcome } from '@/types';
 
 export async function POST(request: Request) {
@@ -21,11 +22,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { rawQrPayload, stationId, clientScanId, eventId, registrationId, otp } = body;
 
-    const station = stationId?.trim() || 'Station-Main';
-    const scanId = clientScanId || crypto.randomUUID();
+    const station = sanitizeText(stationId, 64) || 'Station-Main';
+    const scanId = sanitizeText(clientScanId, 64) || crypto.randomUUID();
 
-    let targetRegId = registrationId;
-    let targetEventId = eventId;
+    let targetRegId = sanitizeText(registrationId, 128);
+    let targetEventId = sanitizeText(eventId, 128);
 
     // If raw QR payload is provided from camera stream
     if (rawQrPayload) {

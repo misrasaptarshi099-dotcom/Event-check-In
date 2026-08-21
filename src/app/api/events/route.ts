@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createEvent, getAllOrganizerEvents, getEventsByOrganizer, getAllPublicEvents } from '@/lib/services/events.service';
 import { verifyAuthToken, requireRole } from '@/lib/security/rbac';
 import { checkRateLimit, getRateLimitKey, REGISTRATION_LIMIT } from '@/lib/security/rateLimit';
+import { sanitizeText, sanitizeUrl, sanitizeInteger } from '@/lib/security/sanitize';
 
 export async function GET(request: Request) {
   try {
@@ -35,45 +36,53 @@ export async function POST(request: Request) {
     if (rateLimitRes) return rateLimitRes;
 
     const body = await request.json();
-    const { name, description, eventDate, eventEndDate, capacity, timezone, venue, bannerUrl, ticketPrice, currency } = body;
+    const cleanName = sanitizeText(body.name, 120);
 
     // Strict input validation
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    if (!cleanName) {
       return NextResponse.json({ error: 'Event name is required.' }, { status: 400 });
     }
 
-    const parsedCapacity = Number(capacity);
-    if (isNaN(parsedCapacity) || parsedCapacity <= 0) {
-      return NextResponse.json({ error: 'Capacity must be a positive integer.' }, { status: 400 });
+    const parsedCapacity = sanitizeInteger(body.capacity, 1, 100000, 0);
+    if (parsedCapacity <= 0) {
+      return NextResponse.json({ error: 'Capacity must be a positive integer (1–100,000).' }, { status: 400 });
     }
 
+    const eventDate = body.eventDate;
     if (!eventDate || isNaN(Date.parse(eventDate))) {
       return NextResponse.json({ error: 'Valid event start date is required.' }, { status: 400 });
     }
 
     let parsedEndDate: string | undefined = undefined;
-    if (eventEndDate) {
-      if (isNaN(Date.parse(eventEndDate))) {
+    if (body.eventEndDate) {
+      if (isNaN(Date.parse(body.eventEndDate))) {
         return NextResponse.json({ error: 'Invalid event end date.' }, { status: 400 });
       }
-      if (new Date(eventEndDate).getTime() < new Date(eventDate).getTime()) {
+      if (new Date(body.eventEndDate).getTime() < new Date(eventDate).getTime()) {
         return NextResponse.json({ error: 'Event end time cannot be before start time.' }, { status: 400 });
       }
-      parsedEndDate = new Date(eventEndDate).toISOString();
+      parsedEndDate = new Date(body.eventEndDate).toISOString();
     }
+
+    const cleanDescription = sanitizeText(body.description, 2000) || undefined;
+    const cleanVenue = sanitizeText(body.venue, 200) || undefined;
+    const cleanBannerUrl = sanitizeUrl(body.bannerUrl);
+    const cleanTimezone = sanitizeText(body.timezone, 50) || 'UTC';
+    const cleanCurrency = ['USD', 'EUR', 'GBP', 'CAD', 'INR'].includes(body.currency) ? body.currency : 'USD';
+    const cleanPrice = Math.max(0, Math.min(1000000, Number(body.ticketPrice) || 0));
 
     const event = await createEvent({
       organizerId: user.uid,
-      name: name.trim(),
-      description: description?.trim() || undefined,
+      name: cleanName,
+      description: cleanDescription,
       eventDate: new Date(eventDate).toISOString(),
       eventEndDate: parsedEndDate,
-      capacity: Math.floor(parsedCapacity),
-      timezone: timezone || 'UTC',
-      venue: venue?.trim() || undefined,
-      bannerUrl: bannerUrl || undefined,
-      ticketPrice: ticketPrice !== undefined ? Math.max(0, Number(ticketPrice)) : 0,
-      currency: currency || 'USD',
+      capacity: parsedCapacity,
+      timezone: cleanTimezone,
+      venue: cleanVenue,
+      bannerUrl: cleanBannerUrl,
+      ticketPrice: cleanPrice,
+      currency: cleanCurrency,
     });
 
     return NextResponse.json({ event }, { status: 201 });
