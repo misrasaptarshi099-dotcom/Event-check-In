@@ -48,7 +48,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {isBusy ? (
           <span className="inline-flex items-center gap-2">
-            <span className="w-3 h-3 border border-current border-t-transparent animate-spin" />
+            <span className="w-3 h-3 border border-current animate-spin" />
             <span>PROCESSING...</span>
           </span>
         ) : (

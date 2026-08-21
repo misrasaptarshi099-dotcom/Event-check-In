@@ -149,9 +149,11 @@ export default function AttendeeRegistrationPage({ params }: PageParams) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center font-mono bg-surface text-primary p-6">
-        <div className="border border-border-rigid p-8 text-center text-xs animate-pulse">
-          Connecting to live event registration ledger...
+      <div className="min-h-screen flex flex-col items-center justify-center font-mono bg-surface text-primary p-6 space-y-4 animate-in fade-in duration-200">
+        <div className="w-8 h-8 border-2 border-primary animate-spin" />
+        <div className="border border-border-rigid p-6 text-center space-y-1 bg-surface-low shadow-sm max-w-sm w-full">
+          <p className="text-xs font-bold uppercase tracking-widest text-primary">LOADING REGISTRATION</p>
+          <p className="text-[10px] text-muted-text">Connecting to live event registration ledger...</p>
         </div>
       </div>
     );

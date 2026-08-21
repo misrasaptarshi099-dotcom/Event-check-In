@@ -217,7 +217,7 @@ export default function EventDashboardPage({ params }: PageParams) {
   if (loading || (!event && !error)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center font-mono bg-surface text-primary p-6 space-y-4 animate-in fade-in duration-200">
-        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary animate-spin" />
         <div className="border border-border-rigid p-6 text-center space-y-1 bg-surface-low shadow-sm max-w-sm w-full">
           <p className="text-xs font-bold uppercase tracking-widest text-primary">
             INITIALIZING OPERATIONS HUB
