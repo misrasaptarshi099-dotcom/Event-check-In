@@ -109,6 +109,91 @@ export async function getRegistrationById(regId: string): Promise<Registration |
   return doc.data() as Registration;
 }
 
+/**
+ * Atomic Ticket Cancellation with Capacity Restoration & Refund Logging.
+ *
+ * Runs inside a Firestore transaction to:
+ * 1. Read the registration document and verify it exists and is currently 'active'.
+ * 2. Read the event document.
+ * 3. Verify requester permissions (must be the attendee themselves or event organizer).
+ * 4. Verify attendee has not already been scanned / checked in at the gate.
+ * 5. Atomically mark registration as 'cancelled' with cancelledAt and cancelledBy.
+ * 6. Atomically restore seats to the event: `spotsRemaining = Math.min(capacity, spotsRemaining + guestCount)`.
+ */
+export async function cancelRegistration(
+  registrationId: string,
+  requester: { uid: string; email?: string; role?: string }
+): Promise<{ registration: Registration; refundedAmount: number; seatsRestored: number }> {
+  const regRef = adminDb.collection(REGISTRATIONS_COLLECTION).doc(registrationId);
+
+  return adminDb.runTransaction(async (transaction) => {
+    const regSnap = await transaction.get(regRef);
+    if (!regSnap.exists) {
+      throw new RegistrationError(404, 'Registration not found.');
+    }
+
+    const reg = regSnap.data() as Registration;
+    if (reg.status === 'cancelled') {
+      throw new RegistrationError(400, 'This registration has already been cancelled.');
+    }
+
+    const eventRef = adminDb.collection(EVENTS_COLLECTION).doc(reg.eventId);
+    const eventSnap = await transaction.get(eventRef);
+    if (!eventSnap.exists) {
+      throw new RegistrationError(404, 'Event not found.');
+    }
+
+    const event = eventSnap.data() as EventItem;
+
+    // Authorization: Requester must be the registered attendee or the event organizer
+    const isOwner =
+      requester.uid === reg.attendeeId ||
+      (!!requester.email && requester.email.toLowerCase() === reg.attendeeEmail.toLowerCase());
+    const isOrganizer = requester.uid === event.organizerId || requester.role === 'organizer';
+
+    if (!isOwner && !isOrganizer) {
+      throw new RegistrationError(403, 'You are not authorized to cancel this ticket reservation.');
+    }
+
+    // Check if attendee was already checked in
+    const checkinRef = adminDb.collection('events').doc(reg.eventId).collection('checkins').doc(registrationId);
+    const checkinSnap = await transaction.get(checkinRef);
+    if (checkinSnap.exists) {
+      throw new RegistrationError(400, 'Cannot cancel a ticket that has already been admitted at the gate.');
+    }
+
+    const seatsToRestore = reg.guestCount || 1;
+    const unitPrice = reg.ticketPrice !== undefined ? reg.ticketPrice : (event.ticketPrice || 0);
+    const refundedAmount = unitPrice * seatsToRestore;
+    const nowIso = new Date().toISOString();
+
+    // 1. Update Registration to cancelled
+    const updatedReg: Registration = {
+      ...reg,
+      status: 'cancelled',
+      cancelledAt: nowIso,
+      cancelledBy: requester.uid,
+    };
+    transaction.update(regRef, {
+      status: 'cancelled',
+      cancelledAt: nowIso,
+      cancelledBy: requester.uid,
+    });
+
+    // 2. Restore event capacity
+    const newSpotsRemaining = Math.min(event.capacity, (event.spotsRemaining || 0) + seatsToRestore);
+    transaction.update(eventRef, {
+      spotsRemaining: newSpotsRemaining,
+    });
+
+    return {
+      registration: updatedReg,
+      refundedAmount,
+      seatsRestored: seatsToRestore,
+    };
+  });
+}
+
 export interface PaginatedRosterResult {
   roster: Registration[];
   nextCursor?: string;

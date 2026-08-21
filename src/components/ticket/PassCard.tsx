@@ -15,6 +15,7 @@ export interface PassCardProps {
 
 export function PassCard({ event, registration, className }: PassCardProps) {
   const now = Date.now();
+  const isCancelled = registration.status === 'cancelled';
   const eventStartMs = new Date(event.eventDate).getTime();
   const checkinOpenMs = eventStartMs - (30 * 60 * 1000);
   const isGateOpen = now >= checkinOpenMs;
@@ -35,11 +36,15 @@ export function PassCard({ event, registration, className }: PassCardProps) {
     minute: '2-digit',
   });
 
+  const seats = registration.guestCount || 1;
+  const unitPrice = registration.ticketPrice !== undefined ? registration.ticketPrice : (event.ticketPrice || 0);
+  const totalAmount = unitPrice * seats;
+
   return (
     <div
       className={clsx(
         'w-full max-w-md mx-auto bg-surface border-2 border-border-rigid shadow-2xl font-mono relative overflow-hidden',
-        isEnded && 'opacity-95',
+        (isEnded || isCancelled) && 'opacity-95',
         className
       )}
     >
@@ -50,24 +55,30 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           <img
             src={event.bannerUrl}
             alt={event.name}
-            className="w-full h-full object-cover object-center"
+            className={clsx("w-full h-full object-cover object-center", isCancelled && "grayscale contrast-125")}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
           <div className="absolute top-3 right-3">
             <StatusChip
-              status={isEnded ? 'EXPIRED' : 'OFFICIAL PASS'}
-              variant={isEnded ? 'danger' : 'neutral'}
+              status={isCancelled ? 'CANCELLED · REFUNDED' : (isEnded ? 'EXPIRED' : 'OFFICIAL PASS')}
+              variant={isCancelled || isEnded ? 'danger' : 'neutral'}
             />
           </div>
         </div>
       ) : (
-        <div className="h-16 bg-primary border-b border-border-rigid flex items-center justify-between px-6">
-          <span className="text-xs uppercase tracking-[0.25em] text-surface font-bold">
-            VOUCH VERIFIED PASS
+        <div className={clsx(
+          "h-16 border-b border-border-rigid flex items-center justify-between px-6",
+          isCancelled ? "bg-accent/15" : "bg-primary"
+        )}>
+          <span className={clsx(
+            "text-xs uppercase tracking-[0.25em] font-bold",
+            isCancelled ? "text-accent" : "text-surface"
+          )}>
+            {isCancelled ? 'CANCELLED RESERVATION' : 'VOUCH VERIFIED PASS'}
           </span>
           <StatusChip
-            status={isEnded ? 'EXPIRED' : 'ACTIVE'}
-            variant={isEnded ? 'danger' : 'success'}
+            status={isCancelled ? 'CANCELLED · REFUNDED' : (isEnded ? 'EXPIRED' : 'ACTIVE')}
+            variant={isCancelled || isEnded ? 'danger' : 'success'}
           />
         </div>
       )}
@@ -78,7 +89,10 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           <p className="text-[10px] text-muted-text uppercase tracking-widest">
             {formattedDate} · {formattedTime} {event.timezone ? `(${event.timezone})` : ''}
           </p>
-          <h2 className="text-2xl sm:text-3xl font-serif italic text-primary tracking-tight font-medium mt-1">
+          <h2 className={clsx(
+            "text-2xl sm:text-3xl font-serif italic tracking-tight font-medium mt-1",
+            isCancelled ? "text-muted-text line-through" : "text-primary"
+          )}>
             {event.name}
           </h2>
           {event.venue && (
@@ -96,7 +110,7 @@ export function PassCard({ event, registration, className }: PassCardProps) {
             </span>
             <span className="font-semibold text-primary truncate block">
               {registration.attendeeName}
-              {(registration.guestCount || 1) > 1 && ` (+${(registration.guestCount || 1) - 1} Guests)`}
+              {seats > 1 && ` (+${seats - 1} Guests)`}
             </span>
             <span className="text-[10px] text-muted-text truncate block">
               {registration.attendeeEmail}
@@ -105,20 +119,21 @@ export function PassCard({ event, registration, className }: PassCardProps) {
 
           <div className="text-right">
             <span className="text-[9px] uppercase tracking-widest text-muted-text block">
-              RESERVATION · {registration.guestCount || 1} SEAT{(registration.guestCount || 1) > 1 ? 'S' : ''}
+              RESERVATION · {seats} SEAT{seats > 1 ? 'S' : ''}
             </span>
             <span className="font-mono text-[10px] font-bold text-primary block truncate">
               {registration.id}
             </span>
-            <span className="text-[10px] text-muted-text block">
-              {(() => {
-                const seats = registration.guestCount || 1;
-                const unitPrice = registration.ticketPrice !== undefined ? registration.ticketPrice : (event.ticketPrice || 0);
-                const totalPaid = unitPrice * seats;
-                return totalPaid > 0
-                  ? `${formatCurrency(totalPaid, event.currency)} Paid`
-                  : 'Free Admission';
-              })()}
+            <span className={clsx("text-[10px] block font-bold", isCancelled ? "text-accent" : "text-muted-text")}>
+              {isCancelled ? (
+                totalAmount > 0
+                  ? `₹${totalAmount.toLocaleString()} Refunded`
+                  : 'Reservation Cancelled'
+              ) : (
+                totalAmount > 0
+                  ? `${formatCurrency(totalAmount, event.currency)} Paid`
+                  : 'Free Admission'
+              )}
             </span>
           </div>
         </div>
@@ -130,8 +145,38 @@ export function PassCard({ event, registration, className }: PassCardProps) {
           <div className="absolute -right-9 w-6 h-6 rounded-full bg-surface-highest border border-border-rigid" />
         </div>
 
-        {/* Dynamic Rotating QR or Still Expired Notice */}
-        {isEnded ? (
+        {/* Dynamic Rotating QR or Cancelled / Expired Notice */}
+        {isCancelled ? (
+          <div className="py-2 space-y-4">
+            <div className="py-8 px-4 border-2 border-dashed border-accent/40 bg-accent/5 text-center space-y-3">
+              <div className="text-4xl">🚫</div>
+              <div className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-widest text-accent block">
+                  RESERVATION CANCELLED & REFUNDED
+                </span>
+                <p className="text-[11px] text-muted-text max-w-xs mx-auto">
+                  This pass has been deactivated. {seats} reserved seat(s) were restored to the event capacity.
+                </p>
+                {registration.cancelledAt && (
+                  <p className="text-[10px] text-muted-text/80 font-mono pt-1">
+                    Cancelled: {new Date(registration.cancelledAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="border border-border-rigid bg-surface-high p-3 text-center space-y-1">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-text">
+                REFUND RECEIPT RECORD
+              </p>
+              <p className="text-[9px] text-muted-text">
+                {totalAmount > 0
+                  ? `Full refund of ${formatCurrency(totalAmount, event.currency)} logged and returned.`
+                  : 'Free reservation seat returned to the organizer inventory.'}
+              </p>
+            </div>
+          </div>
+        ) : isEnded ? (
           <div className="py-2 space-y-4">
             <div className="py-8 px-4 border-2 border-border-rigid bg-surface-container text-center space-y-3">
               <div className="text-4xl opacity-70">🎟️</div>
@@ -181,9 +226,10 @@ export function PassCard({ event, registration, className }: PassCardProps) {
 
       {/* Footer Strip */}
       <div className="border-t border-border-rigid px-6 py-3 bg-surface-high flex items-center justify-between text-[9px] text-muted-text uppercase tracking-wider">
-        <span>{isEnded ? 'VOUCH OS // ARCHIVED' : 'VOUCH OS // RFC 6238'}</span>
+        <span>{isCancelled ? 'VOUCH OS // VOID' : (isEnded ? 'VOUCH OS // ARCHIVED' : 'VOUCH OS // RFC 6238')}</span>
         <span>ID: {registration.id.slice(-8)}</span>
       </div>
     </div>
   );
 }
+

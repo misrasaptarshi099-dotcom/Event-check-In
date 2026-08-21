@@ -10,6 +10,7 @@ import { FinanceAnalyticsView } from '@/components/dashboard/FinanceAnalyticsVie
 import { AiInsightsTerminal } from '@/components/dashboard/AiInsightsTerminal';
 import { SyncConflictDrawer } from '@/components/dashboard/SyncConflictDrawer';
 import { EditEventModal } from '@/components/dashboard/EditEventModal';
+import { formatCurrency } from '@/lib/utils/format';
 import type { EventItem, StatsBundle, FinanceBundle, Registration, CheckinSyncLog } from '@/types';
 
 interface PageParams {
@@ -37,11 +38,15 @@ export default function EventDashboardPage({ params }: PageParams) {
   const [rosterHasMore, setRosterHasMore] = useState(false);
   const [rosterLoading, setRosterLoading] = useState(false);
 
-  // Edit & Delete Modal states
+  // Edit, Delete, and Cancel Registration Modal states
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [cancellingReg, setCancellingReg] = useState<Registration | null>(null);
+  const [cancelRegLoading, setCancelRegLoading] = useState(false);
+  const [cancelRegError, setCancelRegError] = useState<string | null>(null);
 
   const fetchRoster = React.useCallback(async (
     page: number = 1,
@@ -168,6 +173,36 @@ export default function EventDashboardPage({ params }: PageParams) {
     }
   };
 
+  const handleCancelRegistration = async () => {
+    if (!cancellingReg) return;
+    setCancelRegLoading(true);
+    setCancelRegError(null);
+
+    try {
+      const token = await getFreshAuthToken();
+      const res = await fetch(`/api/registrations/${cancellingReg.id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel registration.');
+      }
+
+      setCancellingReg(null);
+      fetchRoster(rosterPage);
+      fetchData();
+    } catch (err: any) {
+      setCancelRegError(err.message || 'Error cancelling registration.');
+    } finally {
+      setCancelRegLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (showEditModal) {
       return;
@@ -209,14 +244,14 @@ export default function EventDashboardPage({ params }: PageParams) {
     {
       key: 'id',
       header: 'Reg ID',
-      render: (r) => <span className="font-mono text-[10px] text-muted-text">{r.id}</span>,
+      render: (r) => <span className="font-mono text-[10px] text-muted-text">{r.id.slice(-8)}</span>,
     },
     {
       key: 'attendeeName',
       header: 'Attendee Name',
       render: (r) => (
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-primary">{r.attendeeName}</span>
+          <span className={`font-semibold ${r.status === 'cancelled' ? 'text-muted-text line-through' : 'text-primary'}`}>{r.attendeeName}</span>
           {(r.guestCount ?? 1) > 1 && (
             <span className="text-[10px] px-1 py-0.5 border border-border-rigid bg-surface-high text-muted-text">
               +{r.guestCount! - 1} Guests
@@ -252,6 +287,35 @@ export default function EventDashboardPage({ params }: PageParams) {
       },
     },
     {
+      key: 'paymentStatus',
+      header: 'Payment / Refund',
+      render: (r) => {
+        const seats = r.guestCount || 1;
+        const unitPrice = r.ticketPrice !== undefined ? r.ticketPrice : (event?.ticketPrice || 0);
+        const total = unitPrice * seats;
+
+        if (r.status === 'cancelled') {
+          return (
+            <StatusChip
+              status={total > 0 ? `REFUNDED (${formatCurrency(total, event?.currency)})` : 'CANCELLED (FREE)'}
+              variant="danger"
+            />
+          );
+        }
+
+        if (total > 0) {
+          return (
+            <StatusChip
+              status={`PAID (${formatCurrency(total, event?.currency)})`}
+              variant="success"
+            />
+          );
+        }
+
+        return <StatusChip status="FREE" variant="neutral" />;
+      },
+    },
+    {
       key: 'checkedInAt',
       header: 'Admitted At',
       render: (r) => (
@@ -263,12 +327,47 @@ export default function EventDashboardPage({ params }: PageParams) {
     {
       key: 'createdAt',
       header: 'Registered',
-      align: 'right',
       render: (r) => (
         <span className="text-[10px] text-muted-text">
           {r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
         </span>
       ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (r) => {
+        if (r.status === 'cancelled') {
+          return (
+            <span className="text-[10px] text-muted-text italic">
+              Cancelled
+            </span>
+          );
+        }
+
+        if (r.checkedIn) {
+          return (
+            <span className="text-[10px] text-success font-semibold">
+              Admitted
+            </span>
+          );
+        }
+
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCancellingReg(r);
+              setCancelRegError(null);
+            }}
+            className="text-[10px] py-1 px-2 border-accent/40 text-accent hover:bg-accent hover:text-surface"
+          >
+            Cancel & Refund
+          </Button>
+        );
+      },
     },
   ];
 
@@ -663,6 +762,77 @@ export default function EventDashboardPage({ params }: PageParams) {
                 onClick={handleDeleteEvent}
               >
                 Yes, Delete Event
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Registration & Refund Modal */}
+      {cancellingReg && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 font-mono">
+          <div className="bg-surface border-2 border-border-rigid w-full max-w-md shadow-2xl p-6 sm:p-8 space-y-6">
+            <div className="space-y-2 border-b border-border-rigid pb-4">
+              <div className="flex items-center gap-2 text-accent text-sm font-bold uppercase tracking-wider">
+                <span>🚫</span>
+                <span>Cancel & Refund Reservation</span>
+              </div>
+              <h3 className="text-xl font-serif italic text-primary font-medium tracking-tight">
+                Cancel pass for &ldquo;{cancellingReg.attendeeName}&rdquo;?
+              </h3>
+              <p className="text-xs text-muted-text leading-relaxed">
+                This will void the attendee&apos;s dynamic QR token, release {cancellingReg.guestCount || 1} seat(s) back to the event capacity, and record a refund transaction in the ledger.
+              </p>
+            </div>
+
+            <div className="p-4 bg-surface-low border border-border-rigid space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-text">Attendee:</span>
+                <span className="font-bold text-primary">{cancellingReg.attendeeName} ({cancellingReg.attendeeEmail})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-text">Seats Released:</span>
+                <span className="font-bold text-primary">{cancellingReg.guestCount || 1} Seat(s)</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-text">Refund Value:</span>
+                <span className="font-bold text-accent">
+                  {(() => {
+                    const seats = cancellingReg.guestCount || 1;
+                    const price = cancellingReg.ticketPrice !== undefined ? cancellingReg.ticketPrice : (event?.ticketPrice || 0);
+                    return price * seats > 0 ? formatCurrency(price * seats, event?.currency) : 'Free Admission';
+                  })()}
+                </span>
+              </div>
+            </div>
+
+            {cancelRegError && (
+              <div className="border border-accent bg-accent/10 p-2.5 text-xs text-accent">
+                [!] {cancelRegError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  setCancellingReg(null);
+                  setCancelRegError(null);
+                }}
+                disabled={cancelRegLoading}
+              >
+                Keep Active
+              </Button>
+              <Button
+                type="button"
+                variant="accent"
+                size="md"
+                loading={cancelRegLoading}
+                onClick={handleCancelRegistration}
+              >
+                Yes, Cancel & Refund
               </Button>
             </div>
           </div>

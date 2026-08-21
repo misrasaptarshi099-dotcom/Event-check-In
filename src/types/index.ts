@@ -40,6 +40,8 @@ export interface Registration {
   qrToken: string;
   totpSecret: string; // Base32 RFC 6238 secret (delivered once to attendee)
   status: RegistrationStatus;
+  cancelledAt?: string;
+  cancelledBy?: string;
   guestCount: number; // Number of seats reserved (1–5, includes the registrant)
   ticketPrice?: number;
   checkedIn?: boolean;

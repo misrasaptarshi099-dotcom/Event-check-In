@@ -260,21 +260,33 @@ export default function HomePage() {
                     const eventTitle = reg.event?.name || 'Event Pass';
                     const eventDate = reg.event?.eventDate;
                     const eventVenue = reg.event?.venue;
+                    const isCancelled = reg.status === 'cancelled';
                     const isEventEnded = reg.event?.eventEndDate
                       ? new Date(reg.event.eventEndDate).getTime() <= Date.now()
                       : (reg.event?.eventDate ? new Date(reg.event.eventDate).getTime() <= Date.now() : false);
+
+                    const seats = reg.guestCount ?? 1;
+                    const unitPrice = reg.ticketPrice !== undefined ? reg.ticketPrice : (reg.event?.ticketPrice || 0);
+                    const totalCost = unitPrice * seats;
 
                     return (
                       <div
                         key={reg.id}
                         className={`border-2 border-border-rigid p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${
-                          isEventEnded ? 'bg-surface-low opacity-85' : 'bg-surface'
+                          isCancelled ? 'bg-surface-low border-dashed border-accent/40 opacity-90' : (isEventEnded ? 'bg-surface-low opacity-85' : 'bg-surface')
                         }`}
                       >
                         {/* Status bar */}
                         <div className="flex items-center justify-between border-b border-border-rigid pb-2.5">
                           <div className="flex items-center gap-1.5">
-                            {isEventEnded ? (
+                            {isCancelled ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-accent" />
+                                <span className="text-[10px] uppercase font-bold text-accent tracking-widest">
+                                  CANCELLED · REFUNDED
+                                </span>
+                              </>
+                            ) : isEventEnded ? (
                               <>
                                 <span className="w-2 h-2 rounded-full bg-muted-text" />
                                 <span className="text-[10px] uppercase font-bold text-muted-text tracking-widest">
@@ -290,18 +302,22 @@ export default function HomePage() {
                               </>
                             )}
                           </div>
-                          {(reg.guestCount ?? 1) > 1 ? (
+
+                          <div className="flex items-center gap-1.5">
                             <span className="text-[10px] bg-surface-high border border-border-rigid px-2 py-0.5 font-bold text-primary">
-                              {reg.guestCount} SEATS RESERVED
+                              {seats} {seats > 1 ? 'SEATS' : 'SEAT'}
                             </span>
-                          ) : (
-                            <span className="text-[10px] text-muted-text uppercase">1 SEAT</span>
-                          )}
+                            <span className={`text-[10px] px-1.5 py-0.5 border font-bold ${
+                              isCancelled ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border-rigid bg-surface text-muted-text'
+                            }`}>
+                              {isCancelled ? 'REFUNDED' : (totalCost > 0 ? 'PAID' : 'FREE')}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Event Details */}
                         <div className="space-y-1">
-                          <h4 className="text-xl font-serif italic font-medium text-primary tracking-tight">
+                          <h4 className={`text-xl font-serif italic font-medium tracking-tight ${isCancelled ? 'text-muted-text line-through' : 'text-primary'}`}>
                             {eventTitle}
                           </h4>
                           {eventDate && (
@@ -312,14 +328,26 @@ export default function HomePage() {
                           {eventVenue && (
                             <p className="text-[11px] text-muted-text">📍 {eventVenue}</p>
                           )}
-                          <p className="text-[10px] text-muted-text font-mono pt-1">
-                            Pass Assigned: <span className="text-primary">{reg.attendeeName}</span>
-                          </p>
+                          <div className="flex items-center justify-between text-[10px] text-muted-text font-mono pt-1">
+                            <span>Pass: <span className="text-primary">{reg.attendeeName}</span></span>
+                            <span>{totalCost > 0 ? (isCancelled ? `₹${totalCost.toLocaleString()} Refunded` : `₹${totalCost.toLocaleString()} Paid`) : 'Complimentary'}</span>
+                          </div>
                         </div>
 
-                        {/* CTA button or Static Expired State */}
+                        {/* CTA button */}
                         <div className="pt-2 border-t border-border-rigid">
-                          {isEventEnded ? (
+                          {isCancelled ? (
+                            <Link href={`/ticket/${reg.id}?eventId=${reg.eventId}`} className="block w-full">
+                              <Button
+                                variant="outline"
+                                size="md"
+                                className="w-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-accent/40 text-accent hover:bg-accent/10"
+                              >
+                                <span>🚫 View Refunded Receipt</span>
+                                <span>→</span>
+                              </Button>
+                            </Link>
+                          ) : isEventEnded ? (
                             <div className="w-full py-2.5 px-3 bg-surface-container border border-border-rigid text-center text-xs font-bold uppercase tracking-wider text-muted-text flex items-center justify-center gap-2 select-none">
                               <span>🔒 Event Concluded · Pass Expired</span>
                             </div>
