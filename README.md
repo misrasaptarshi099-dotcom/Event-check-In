@@ -28,7 +28,7 @@ VOUCH addresses these challenges through five foundational pillars:
 3. Deterministic Offline Mode: Gate devices download AES-GCM encrypted rosters locally, enabling sub-millisecond offline validation with automatic write-ahead log replay upon reconnection.
 4. Relational Data Integrity (3NF): A normalized schema separates user accounts, events, registrations, and check-in audit logs to eliminate data anomalies.
 5. Multi-Layer RBAC: Strict separation of privileges between platform organizers, gate staff, and attendees enforced via Firebase Auth Custom Claims and server-side token validation.
-   Organizers can make events, scan and perform other operations in the organizer opration hub, but cannot access organizer priviledges for events made by other organizers.
+6. Organizers can make events, scan and perform other operations in the organizer opration hub, but cannot access organizer priviledges for events made by other organizers.
 ## 2. Cryptographic Security and Admission Verification
 
 ### Dynamic TOTP Rotation (RFC 6238)
