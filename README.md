@@ -23,7 +23,7 @@ Traditional event check-in systems rely on static QR codes that can be easily sc
 
 VOUCH addresses these challenges through five foundational pillars:
 
-1. Dynamic Identity Tokens: Static barcodes are replaced with client-generated, rotating TOTP tokens that refresh every 30 seconds.
+1. Dynamic Identity Tokens: Static barcodes are replaced with client-generated, rotating TOTP tokens that refresh every 30 seconds. You can only start check-in 30 mins prior to the start of the event
 2. Guaranteed Atomic Operations: All capacity modifications and check-in verifications execute inside atomic database transactions, preventing race conditions.
 3. Deterministic Offline Mode: Gate devices download AES-GCM encrypted rosters locally, enabling sub-millisecond offline validation with automatic write-ahead log replay upon reconnection.
 4. Relational Data Integrity (3NF): A normalized schema separates user accounts, events, registrations, and check-in audit logs to eliminate data anomalies.
